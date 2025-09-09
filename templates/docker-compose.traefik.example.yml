@@ -1,0 +1,137 @@
+---
+# Docker Compose para Traefik - Reverse Proxy
+#
+# Este arquivo configura o Traefik como reverse proxy para o Querido Diário
+#
+# Uso:
+#   1. Copie este arquivo: cp templates/docker-compose.traefik.example.yml docker-compose.traefik.yml
+#   2. Configure as variáveis de ambiente necessárias
+#   3. Crie a rede frontend: docker network create frontend
+#   4. Execute: docker compose -f docker-compose.traefik.yml up -d
+#
+# Middlewares Disponíveis:
+#   - cors-headers: Headers CORS para APIs
+#   - rate-limit: Limitação de requisições (100 burst, 50 avg/min)
+#   - api-rate-limit: Limitação mais restritiva para APIs (50 burst, 25 avg/min)
+#   - security-headers: Headers de segurança (HSTS, XSS, etc.)
+#   - compression: Compressão gzip/deflate
+#   - redirect-to-https: Redirecionamento HTTP → HTTPS (aplicado automaticamente)
+#
+# Para usar nos serviços, adicione nas labels:
+#   - "traefik.http.routers.SEU-SERVIÇO.middlewares=cors-headers,rate-limit,security-headers"
+#
+# Documentação completa: docs/traefik-setup.md
+
+services:
+  traefik:
+    image: traefik:v3.5
+    container_name: traefik
+    restart: unless-stopped
+
+    command:
+      # Providers - Docker
+      - --providers.docker=true
+      # Esta opção desabilita a exposição automática de containers Docker para o Traefik por padrão.
+      # Quando definida como false, os containers só serão expostos se explicitamente tiverem a
+      # label traefik.enable=true configurada. Isso proporciona melhor segurança ao exigir
+      # configuração explícita para cada serviço que deve ser acessível através do Traefik.
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=frontend
+
+      # Entrypoints
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+
+      # SSL Certificates - Let's Encrypt
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@queridodiario.ok.org.br}
+      - --certificatesresolvers.letsencrypt.acme.storage=/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+
+      # Logging
+      - --log.level=${TRAEFIK_LOG_LEVEL:-INFO}
+      - --accesslog=true
+
+    ports:
+      - "80:80"   # HTTP
+      - "443:443" # HTTPS
+
+    volumes:
+      # Socket Docker para descoberta automática
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Persistência dos certificados SSL
+      - traefik-acme:/acme.json
+
+    networks:
+      - frontend
+
+    labels:
+      # Redirecionamento HTTP -> HTTPS para todos os hosts
+      - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+
+      # Middlewares Personalizados - Definições Globais
+      # Estes middlewares ficam disponíveis para uso em qualquer serviço
+
+      # CORS Headers
+      - "traefik.http.middlewares.cors-headers.headers.accesscontrolallowmethods=GET,POST,OPTIONS,PUT,DELETE"
+      - "traefik.http.middlewares.cors-headers.headers.accesscontrolalloworigin=https://${DOMAIN:-queridodiario.local},https://querido-diario-plataforma.netlify.app"
+      - "traefik.http.middlewares.cors-headers.headers.accesscontrolallowcredentials=true"
+      - "traefik.http.middlewares.cors-headers.headers.accesscontrolmaxage=3600"
+
+      # Rate Limiting
+      - "traefik.http.middlewares.rate-limit.ratelimit.burst=100"
+      - "traefik.http.middlewares.rate-limit.ratelimit.average=50"
+      - "traefik.http.middlewares.rate-limit.ratelimit.period=1m"
+
+      # Security Headers
+      - "traefik.http.middlewares.security-headers.headers.frameDeny=true"
+      - "traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.security-headers.headers.browserXssFilter=true"
+      - "traefik.http.middlewares.security-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
+      - "traefik.http.middlewares.security-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.security-headers.headers.stsPreload=true"
+
+      # API Rate Limiting (mais restritivo para APIs)
+      - "traefik.http.middlewares.api-rate-limit.ratelimit.burst=50"
+      - "traefik.http.middlewares.api-rate-limit.ratelimit.average=25"
+      - "traefik.http.middlewares.api-rate-limit.ratelimit.period=1m"
+
+      # Compression
+      - "traefik.http.middlewares.compression.compress=true"
+
+      # Roteamento do frontend - Site principal para Netlify (substituindo configuração nginx)
+      # Isso gerencia o roteamento do domínio principal que era feito anteriormente pelo nginx
+      - "traefik.http.routers.frontend-main.rule=Host(`${DOMAIN:-queridodiario.local}`)"
+      - "traefik.http.routers.frontend-main.entrypoints=web,websecure"
+      - "traefik.http.routers.frontend-main.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.frontend-main.middlewares=security-headers,compression"
+      - "traefik.http.routers.frontend-main.service=frontend-netlify"
+      - "traefik.http.routers.frontend-main.priority=1"
+      - "traefik.http.services.frontend-netlify.loadbalancer.server.url=https://querido-diario-plataforma.netlify.app"
+
+      # Redirecionamento WWW para domínios principais (se usando variantes www)
+      - "traefik.http.routers.frontend-www-redirect.rule=Host(`www.${DOMAIN:-queridodiario.local}`)"
+      - "traefik.http.routers.frontend-www-redirect.entrypoints=web,websecure"
+      - "traefik.http.routers.frontend-www-redirect.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.frontend-www-redirect.middlewares=www-to-non-www"
+      - "traefik.http.routers.frontend-www-redirect.priority=10"
+
+      - "traefik.http.middlewares.www-to-non-www.redirectregex.regex=^https://www\\.(.*)"
+      - "traefik.http.middlewares.www-to-non-www.redirectregex.replacement=https://$${1}"
+      - "traefik.http.middlewares.www-to-non-www.redirectregex.permanent=true"
+
+    environment:
+      # Configurações opcionais
+      - ACME_EMAIL=${ACME_EMAIL:-admin@queridodiario.ok.org.br}
+      - TRAEFIK_LOG_LEVEL=${TRAEFIK_LOG_LEVEL:-INFO}
+
+volumes:
+  traefik-acme:
+    driver: local
+
+networks:
+  frontend:
+    external: true

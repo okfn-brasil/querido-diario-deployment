@@ -1,0 +1,93 @@
+# ---
+# Development overrides for Querido Diário
+# Use with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --profile dev
+
+services:
+  querido-diario-api:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    labels:
+      - "traefik.http.routers.querido-diario-api.rule=Host(`api.queridodiario.local`) || PathPrefix(`/api`)"
+      - "traefik.http.routers.querido-diario-api.entrypoints=web"
+      - "traefik.http.routers.querido-diario-api.tls=false"
+    ports:
+      - "${API_DEV_PORT:-8080}:8080"  # Expose for direct access in development
+
+  querido-diario-backend:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      querido-diario-api:
+        condition: service_healthy
+    environment:
+      QD_BACKEND_DEBUG: ${QD_BACKEND_DEBUG:-True}
+      QD_BACKEND_ALLOWED_HOSTS: ${QD_BACKEND_ALLOWED_HOSTS:-*}
+      QD_BACKEND_ALLOWED_ORIGINS: ${QD_BACKEND_ALLOWED_ORIGINS:-http://localhost:4200,http://localhost:8000,http://backend-api.queridodiario.local,http://api.queridodiario.local}
+      QD_BACKEND_CSRF_TRUSTED_ORIGINS: ${QD_BACKEND_CSRF_TRUSTED_ORIGINS:-http://backend.queridodiario.local,http://localhost:8000}
+      QD_BACKEND_DB_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      STATIC_URL: ${STATIC_URL:-http://backend.queridodiario.local/api/static/}
+      FRONT_BASE_URL: ${FRONT_BASE_URL:-http://localhost:4200}
+    labels:
+      - "traefik.http.routers.querido-diario-backend.rule=Host(`backend.queridodiario.local`) || PathPrefix(`/backend`)"
+      - "traefik.http.routers.querido-diario-backend.entrypoints=web"
+      - "traefik.http.routers.querido-diario-backend.tls=false"
+    ports:
+      - "${BACKEND_DEV_PORT:-8000}:8000"  # Expose for direct access in development
+    command: python manage.py runserver 0.0.0.0:8000  # Use Django dev server
+
+  postgres:
+    ports:
+      - "${POSTGRES_DEV_PORT:-5432}:5432"  # Expose for direct database access in development
+
+  opensearch:
+    ports:
+      - "${OPENSEARCH_DEV_PORT:-9200}:9200"  # Expose for direct OpenSearch access in development
+
+  minio:
+    ports:
+      - "${MINIO_DEV_PORT:-9000}:9000"  # Expose for direct MinIO access in development
+
+  redis:
+    ports:
+      - "${REDIS_DEV_PORT:-6378}:6378"  # Expose for direct Redis access in development
+
+  apache-tika:
+    ports:
+      - "${APACHE_TIKA_DEV_PORT:-9998}:9998"  # Expose for direct Tika access in development
+
+  querido-diario-data-processing:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      apache-tika:
+        condition: service_healthy
+    environment:
+      DEBUG: ${DEBUG:-1}
+      EXECUTION_MODE: ${EXECUTION_MODE:-DEVELOPMENT}
+    restart: "no"  # Don't auto-restart in development
+
+  # Add Celery services dependencies for development
+  celery-beat:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-worker:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
