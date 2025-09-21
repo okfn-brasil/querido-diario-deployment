@@ -15,6 +15,7 @@ services:
       - "traefik.http.routers.querido-diario-api.rule=Host(`api.queridodiario.local`) || PathPrefix(`/api`)"
       - "traefik.http.routers.querido-diario-api.entrypoints=web"
       - "traefik.http.routers.querido-diario-api.tls=false"
+      - "traefik.http.services.querido-diario-api.loadbalancer.server.port=8080"
     ports:
       - "${API_DEV_PORT:-8080}:8080"  # Expose for direct access in development
 
@@ -27,17 +28,20 @@ services:
       querido-diario-api:
         condition: service_healthy
     environment:
+      QD_API_URL: http://api.queridodiario.local
       QD_BACKEND_DEBUG: ${QD_BACKEND_DEBUG:-True}
-      QD_BACKEND_ALLOWED_HOSTS: ${QD_BACKEND_ALLOWED_HOSTS:-*}
-      QD_BACKEND_ALLOWED_ORIGINS: ${QD_BACKEND_ALLOWED_ORIGINS:-http://localhost:4200,http://localhost:8000,http://backend-api.queridodiario.local,http://api.queridodiario.local}
-      QD_BACKEND_CSRF_TRUSTED_ORIGINS: ${QD_BACKEND_CSRF_TRUSTED_ORIGINS:-http://backend.queridodiario.local,http://localhost:8000}
-      QD_BACKEND_DB_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
-      STATIC_URL: ${STATIC_URL:-http://backend.queridodiario.local/api/static/}
-      FRONT_BASE_URL: ${FRONT_BASE_URL:-http://localhost:4200}
+      QD_BACKEND_ALLOWED_HOSTS: *
+      QD_BACKEND_ALLOWED_ORIGINS: http://localhost,http://localhost:4200,http://localhost:8000,http://localhost:8080,http://backend-api.queridodiario.local,http://api.queridodiario.local
+      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: *
+      QD_BACKEND_CSRF_TRUSTED_ORIGINS: http://backend-api.queridodiario.local,http://localhost:8000
+      QD_BACKEND_SECRET_KEY: local-execution-django-secret-key
+      STATIC_URL: http://backend-api.queridodiario.local/api/static/
+      FRONT_BASE_URL: ${FRONT_BASE_URL:-http://localhost:4200} # TODO: CHECK
     labels:
-      - "traefik.http.routers.querido-diario-backend.rule=Host(`backend.queridodiario.local`) || PathPrefix(`/backend`)"
+      - "traefik.http.routers.querido-diario-backend.rule=Host(`backend-api.queridodiario.local`) || PathPrefix(`/backend`)"
       - "traefik.http.routers.querido-diario-backend.entrypoints=web"
       - "traefik.http.routers.querido-diario-backend.tls=false"
+      - "traefik.http.services.querido-diario-backend.loadbalancer.server.port=8000"
     ports:
       - "${BACKEND_DEV_PORT:-8000}:8000"  # Expose for direct access in development
     command: python manage.py runserver 0.0.0.0:8000  # Use Django dev server
@@ -62,6 +66,43 @@ services:
     ports:
       - "${APACHE_TIKA_DEV_PORT:-9998}:9998"  # Expose for direct Tika access in development
 
+  # Add Celery services dependencies for development
+  celery-beat:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      QD_API_URL: http://api.queridodiario.local
+      QD_BACKEND_DEBUG: ${QD_BACKEND_DEBUG:-True}
+      QD_BACKEND_ALLOWED_HOSTS: *
+      QD_BACKEND_ALLOWED_ORIGINS: http://localhost,http://localhost:4200,http://localhost:8000,http://localhost:8080,http://backend-api.queridodiario.local,http://api.queridodiario.local
+      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: *
+      QD_BACKEND_CSRF_TRUSTED_ORIGINS: http://backend-api.queridodiario.local,http://localhost:8000
+      QD_BACKEND_SECRET_KEY: local-execution-django-secret-key
+      STATIC_URL: http://backend-api.queridodiario.local/api/static/
+      # TODO: CHECK
+      FRONT_BASE_URL: ${FRONT_BASE_URL:-http://localhost:4200}
+
+  celery-worker:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      QD_API_URL: http://api.queridodiario.local
+      QD_BACKEND_DEBUG: ${QD_BACKEND_DEBUG:-True}
+      QD_BACKEND_ALLOWED_HOSTS: *
+      QD_BACKEND_ALLOWED_ORIGINS: http://localhost,http://localhost:4200,http://localhost:8000,http://localhost:8080,http://backend-api.queridodiario.local,http://api.queridodiario.local
+      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: *
+      QD_BACKEND_CSRF_TRUSTED_ORIGINS: http://backend-api.queridodiario.local,http://localhost:8000
+      QD_BACKEND_SECRET_KEY: local-execution-django-secret-key
+      STATIC_URL: http://backend-api.queridodiario.local/api/static/
+      # TODO: CHECK
+      FRONT_BASE_URL: ${FRONT_BASE_URL:-http://localhost:4200}
+
   querido-diario-data-processing:
     depends_on:
       postgres:
@@ -77,17 +118,64 @@ services:
       EXECUTION_MODE: ${EXECUTION_MODE:-DEVELOPMENT}
     restart: "no"  # Don't auto-restart in development
 
-  # Add Celery services dependencies for development
-  celery-beat:
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+  traefik:
+    image: traefik:v3.5
+    container_name: traefik
+    restart: unless-stopped
 
-  celery-worker:
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    command:
+      # Providers - Docker
+      - --providers.docker=true
+      # Esta opção desabilita a exposição automática de containers Docker para o Traefik por padrão.
+      # Quando definida como false, os containers só serão expostos se explicitamente tiverem a
+      # label traefik.enable=true configurada. Isso proporciona melhor segurança ao exigir
+      # configuração explícita para cada serviço que deve ser acessível através do Traefik.
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=frontend
+
+      # Entrypoints
+      - --entrypoints.web.address=:80
+
+      # Logging
+      - --log.level=${TRAEFIK_LOG_LEVEL:-DEBUG}
+      - --accesslog=true
+
+    ports:
+      - "80:80"   # HTTP
+
+    volumes:
+      # Socket Docker para descoberta automática
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+    networks:
+      - frontend
+
+    labels:
+      # Middlewares Personalizados - Definições Globais
+      # Estes middlewares ficam disponíveis para uso em qualquer serviço
+
+      # CORS Headers - Validate
+      - "traefik.http.middlewares.cors-headers.headers.accesscontrolallowmethods=GET,POST,OPTIONS,PUT,DELETE"
+      - "traefik.http.middlewares.cors-headers.headers.accesscontrolalloworigin=http://${DOMAIN:-queridodiario.local},http://localhost"
+      - "traefik.http.middlewares.cors-headers.headers.accesscontrolallowcredentials=true"
+      - "traefik.http.middlewares.cors-headers.headers.accesscontrolmaxage=3600"
+
+      # Security Headers - Validate
+      - "traefik.http.middlewares.security-headers.headers.frameDeny=true"
+      - "traefik.http.middlewares.security-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.security-headers.headers.browserXssFilter=true"
+      - "traefik.http.middlewares.security-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
+      - "traefik.http.middlewares.security-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.security-headers.headers.stsPreload=true"
+
+      # Compression
+      - "traefik.http.middlewares.compression.compress=true"
+
+    environment:
+      # Configurações opcionais
+      - ACME_EMAIL=${ACME_EMAIL:-admin@queridodiario.local}
+      - TRAEFIK_LOG_LEVEL=${TRAEFIK_LOG_LEVEL:-DEBUG}
+
+networks:
+  frontend:
