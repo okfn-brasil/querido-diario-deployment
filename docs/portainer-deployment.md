@@ -1,10 +1,10 @@
-# Deploy com Portainer
+# Deploy de Produção
 
-> 📅 **Última atualização**: Setembro 2025
+> 📅 **Última atualização**: Setembro 2025 (Pós-refatoração)
 
 ## Visão Geral
 
-Este guia explica como fazer deploy da plataforma Querido Diário usando Portainer, uma interface web para gerenciamento de containers Docker.
+Este guia explica como fazer deploy da plataforma Querido Diário em produção. Após a refatoração, o processo foi drasticamente simplificado - não é mais necessário usar Portainer, pois o Docker Compose foi simplificado para funcionar diretamente.
 
 ## Pré-requisitos
 
@@ -13,73 +13,87 @@ Este guia explica como fazer deploy da plataforma Querido Diário usando Portain
 - **PostgreSQL** (instância externa)
 - **OpenSearch/Elasticsearch** (cluster externo)
 - **S3/MinIO/DigitalOcean Spaces** (storage externo)
-- **Traefik** (reverse proxy com SSL)
 - **Mailjet** (serviço de email)
 
 ### Servidor
 
 - Docker e Docker Compose instalados
-- Portainer instalado e configurado
-- Network `frontend` criada para Traefik
-- Certificados SSL configurados
+- Network `frontend` criada para Traefik (criada automaticamente pelos comandos make)
 
-## Processo de Deploy
+## Processo de Deploy Simplificado
 
-### 1. Gerar Arquivos de Produção
+### 1. Gerar Arquivo de Configuração
 
 ```bash
 # No repositório querido-diario-deployment
-make generate-all
+make setup-env-prod
 ```
 
-Isso irá gerar:
-
-- `docker-compose-portainer.yml` - configuração otimizada para Portainer
-- `.env.production` - variáveis de ambiente para produção
+Isso irá gerar um arquivo `.env` baseado no template `templates/env.prod.sample`.
 
 ### 2. Configurar Variáveis de Ambiente
 
-Edite o arquivo `.env.production` gerado com suas configurações:
+Edite o arquivo `.env` gerado com suas configurações específicas:
 
 ```bash
-```bash
-# Domínios
+# Domínio principal (obrigatório)
 DOMAIN=queridodiario.ok.org.br
-# API será acessível em: api.${DOMAIN}
-# Backend será acessível em: backend-api.${DOMAIN}
 
-# Banco de Dados (externo)
-# NOTA: Para o Portainer, ainda pode ser útil definir QD_BACKEND_DB_URL diretamente
-# ou usar as variáveis individuais que serão interpoladas no docker-compose:
-QD_BACKEND_DB_URL=postgres://user:password@external-db:5432/querido_diario
-# OU alternativamente:
-# POSTGRES_HOST=external-db
-# POSTGRES_PORT=5432
-# POSTGRES_DB=querido_diario
-# POSTGRES_USER=user
-# POSTGRES_PASSWORD=password
+# Segurança (obrigatório)
+QD_BACKEND_SECRET_KEY=sua-chave-super-secreta-django
 
-POSTGRES_COMPANIES_HOST=external-db.com
-POSTGRES_AGGREGATES_HOST=external-db.com
+# Banco de Dados - API (externo, obrigatório)
+QD_DATA_DB_HOST=seu-postgres-host.com
+QD_DATA_DB_USER=usuario_api
+QD_DATA_DB_PASSWORD=senha_api
+QD_DATA_DB_NAME=queridodiario
 
-# OpenSearch (externo)
-QUERIDO_DIARIO_OPENSEARCH_HOST=external-opensearch.com:9200
+# Banco de Dados - Backend (externo, obrigatório)
+QD_BACKEND_DB_HOST=seu-postgres-host.com
+QD_BACKEND_DB_USER=usuario_backend
+QD_BACKEND_DB_PASSWORD=senha_backend
+QD_BACKEND_DB_NAME=backend
+
+# Banco de Dados - Companies (externo, obrigatório)
+POSTGRES_COMPANIES_HOST=seu-postgres-host.com
+POSTGRES_COMPANIES_USER=usuario_companies
+POSTGRES_COMPANIES_PASSWORD=senha_companies
+POSTGRES_COMPANIES_DB=companies
+
+# OpenSearch (externo, obrigatório)
+QUERIDO_DIARIO_OPENSEARCH_HOST=https://seu-opensearch:9200
 QUERIDO_DIARIO_OPENSEARCH_USER=admin
-QUERIDO_DIARIO_OPENSEARCH_PASSWORD=senha_segura
+QUERIDO_DIARIO_OPENSEARCH_PASSWORD=senha_opensearch
 
-# Storage (externo)
-QUERIDO_DIARIO_FILES_ENDPOINT=https://storage.example.com/bucket/
+# Storage S3/MinIO (externo, obrigatório)
+STORAGE_ENDPOINT=https://seu-s3.amazonaws.com
+STORAGE_ACCESS_KEY=sua-access-key
+STORAGE_ACCESS_SECRET=sua-secret-key
+STORAGE_BUCKET=queridodiariobucket
 
-# Segurança
-QD_BACKEND_SECRET_KEY=chave-super-secreta-django
-CERT_RESOLVER=letsencrypt
-
-# Email
+# Email - Mailjet (obrigatório para funcionalidades de contato)
 MAILJET_API_KEY=sua-chave-mailjet
-MAILJET_SECRET_KEY=sua-chave-secreta-mailjet
+MAILJET_SECRET_KEY=sua-secret-mailjet
+DEFAULT_FROM_EMAIL=noreply@queridodiario.ok.org.br
 ```
 
-### 3. Deploy via Portainer
+### 3. Deploy Direto com Docker Compose
+
+Com a refatoração, não é mais necessário usar Portainer. O deploy é feito diretamente:
+
+```bash
+# Deploy simples
+make prod
+```
+
+**OU** se preferir fazer manualmente:
+
+```bash
+# Criar rede se não existir
+docker network create frontend
+
+# Deploy direto
+docker compose -f docker-compose.yml up -d
 
 #### Opção A: Interface Web
 

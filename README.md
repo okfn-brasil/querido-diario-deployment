@@ -1,19 +1,19 @@
 # Querido Diário - Deployment
 
-Sistema automatizado de deploy da plataforma Querido Diário com suporte completo para desenvolvimento e produção.
+Sistema simplificado de deploy da plataforma Querido Diário com suporte para desenvolvimento e produção.
 
 ## 🚀 Início Rápido
 
 ### Desenvolvimento
 ```bash
-make dev                # Gera .env + inicia todos os serviços
+make dev                # Gera .env + inicia todos os serviços localmente
 ```
 
 ### Produção  
 ```bash
-make generate-all       # Gera arquivos de produção
-# Editar .env.production conforme necessário
-make prod               # Deploy via Portainer
+make setup-env-prod     # Gera .env a partir do template
+# Editar .env com suas configurações específicas
+make prod               # Deploy de produção
 ```
 
 ## 📋 Visão Geral da Plataforma
@@ -24,279 +24,276 @@ A plataforma Querido Diário é composta por:
 - **Backend** (Django): Interface web para administração
 - **Data Processing**: Processamento de documentos de gazetas
 - **Frontend** (Angular): Interface do usuário (deploy separado)
-- **Infraestrutura**: PostgreSQL, OpenSearch, MinIO/S3, Redis
+- **Infraestrutura**: PostgreSQL, OpenSearch, MinIO/S3, Redis, Traefik
 
-## 🎯 Sistema de Geração Automática
+## 🎯 Estrutura Simplificada
 
-Esta solução elimina redundâncias através de **geração automática** de configurações:
+Após a refatoração, o projeto foi drasticamente simplificado:
 
 ### Estrutura de Arquivos
 ```
 📁 querido-diario-deployment/
-├── 🎯 TEMPLATES MESTRES
+├── 📋 TEMPLATES (Fonte única da verdade)
 │   └── templates/
-│       ├── env.complete.sample          # Template mestre de variáveis
-│       ├── overrides.example            # Exemplo de sobrescritas
-│       ├── docker-compose.yml           # Configuração base completa
-│       ├── docker-compose.dev.yml       # Overrides de desenvolvimento
-│       └── docker-compose.traefik.example.yml  # Template Traefik
+│       ├── env.prod.sample             # Template de variáveis para produção
+│       ├── docker-compose.yml          # Configuração completa com Traefik integrado
+│       └── docker-compose.dev.yml      # Overrides para desenvolvimento local
 │
-├── 🤖 GERADOS AUTOMATICAMENTE (ignorados pelo git)
-│   ├── .env                            # Para desenvolvimento
-│   ├── .env.production                 # Para produção
-│   ├── docker-compose.yml              # Copiado do template
-│   ├── docker-compose.dev.yml          # Copiado do template
-│   ├── docker-compose-portainer.yml    # Gerado para produção
-│   └── docker-compose.traefik.yml      # Copiado do template
+├── 🤖 GERADOS (só o .env, ignore no git)
+│   └── .env                            # Arquivo de ambiente para o ambiente atual
 │
-├── 🛠️ AUTOMAÇÃO
-│   ├── scripts/
-│   │   ├── generate-env.py              # Gerador unificado de .env
-│   │   └── generate-portainer-compose.py # Gerador de produção
-│   └── Makefile                         # Comandos automatizados
+├── 📚 DOCUMENTAÇÃO
+│   └── docs/                           # Documentação técnica
 │
-└── 📚 DOCUMENTAÇÃO
-    └── docs/                            # Documentação técnica
+├── 🗂️ OUTROS
+│   ├── Makefile                        # Comandos simplificados
+│   ├── init-scripts/                   # Scripts de inicialização de bancos
+│   └── _deprecated/                    # Scripts antigos movidos (não usar)
 ```
 
 ## 🎮 Comandos Principais
 
 | Comando | Descrição |
 |---------|-------------|
-| `make dev` | Gera arquivos + inicia ambiente de desenvolvimento |
-| `make generate-dev` | Gera docker-compose.yml + docker-compose.dev.yml |
-| `make generate-prod` | Gera docker-compose-portainer.yml para produção |
-| `make generate-traefik` | Gera docker-compose.traefik.yml |
+| `make dev` | Inicia ambiente de desenvolvimento completo |
+| `make dev-build` | Reconstrói e inicia ambiente de desenvolvimento |
+| `make prod` | Inicia ambiente de produção |
+| `make prod-build` | Reconstrói e inicia ambiente de produção |
 | `make setup-env-dev` | Gera .env para desenvolvimento |
-| `make setup-env-prod` | Gera .env.production para produção |
-| `make generate-all` | Gera todos os arquivos de produção |
-| `make prod` | Deploy completo de produção |
+| `make setup-env-prod` | Gera .env para produção |
 | `make validate` | Valida sintaxe dos arquivos docker-compose |
-| `make clean-env` | Remove arquivos gerados |
+| `make clean` | Para containers e remove volumes |
+| `make clean-all` | Limpeza completa |
+| `make logs` | Mostra logs de todos os serviços |
+| `make status` | Mostra status dos serviços |
 | `make help` | Lista todos os comandos disponíveis |
 
 ## 🏗️ Configuração de Ambientes
 
 ### Desenvolvimento
 
-O ambiente de desenvolvimento usa containers locais para toda a infraestrutura:
+O ambiente de desenvolvimento usa containers locais para toda a infraestrutura e está configurado para funcionar "out of the box":
 
 ```bash
-# Setup automatizado (recomendado)
-make dev                        # Gera arquivos + inicia todos os serviços
-
-# Setup manual (se necessário)
-make generate-dev              # Gera docker-compose.yml + docker-compose.dev.yml
-make setup-env-dev             # Gera .env
-docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile dev up -d
+make dev                        # Um comando, tudo funcionando!
 ```
 
 **Características:**
 
-- Todos os serviços em containers locais
-- Debug habilitado
-- CORS permissivo para desenvolvimento
-- Dados persistentes em volumes locais
+- ✅ Configuração automática com domínio local (`queridodiario.local`)
+- ✅ Todos os serviços em containers locais (PostgreSQL, OpenSearch, MinIO, Redis)
+- ✅ Traefik configurado para HTTP (sem SSL)
+- ✅ Debug habilitado
+- ✅ CORS permissivo para desenvolvimento
+- ✅ Dados persistentes em volumes locais
+- ✅ Portas expostas para acesso direto aos serviços
+
+**URLs disponíveis:**
+- API: http://localhost:8080 ou http://api.queridodiario.local
+- Backend: http://localhost:8000 ou http://backend-api.queridodiario.local
+- OpenSearch: http://localhost:9200
+- MinIO: http://localhost:9000
+- Redis: localhost:6378
 
 ### Produção
 
-O ambiente de produção usa serviços externos gerenciados:
+O ambiente de produção usa o mesmo docker-compose principal, mas sem os profiles de desenvolvimento e com configurações para serviços externos:
 
 ```bash
-# Setup automatizado (recomendado)
-make generate-all              # Gera docker-compose-portainer.yml + .env.production
-# Editar .env.production com configurações de produção
-make prod                      # Deploy via Portainer
-
-# Setup manual (se necessário)
-make generate-prod             # Gera docker-compose-portainer.yml
-make setup-env-prod           # Gera .env.production
-# Editar .env.production
-docker compose -f docker-compose-portainer.yml --env-file .env.production up -d
+make setup-env-prod             # Gera .env baseado no template
+# Editar .env com suas configurações
+make prod                       # Deploy de produção
 ```
 
 **Características:**
 
-- Serviços externos para infraestrutura (PostgreSQL, OpenSearch, S3)
-- Debug desabilitado
-- HTTPS obrigatório via Traefik
-- Configurações de segurança e performance
-- Limites de recursos configurados
+- ✅ Traefik integrado com SSL automático (Let's Encrypt)
+- ✅ Configuração para serviços externos (PostgreSQL, OpenSearch, S3)
+- ✅ Debug desabilitado
+- ✅ HTTPS obrigatório
+- ✅ Configurações de segurança e performance
+- ✅ Limites de recursos configurados
 
 ## ⚙️ Configuração de Produção
 
-### Serviços Externos Necessários
+### Variáveis Obrigatórias
 
-Antes do deploy de produção, configure:
+Edite o arquivo `.env` gerado com suas configurações:
 
 ```bash
-# Editar .env.production com suas configurações
-
-# Domínios
+# DOMÍNIO (obrigatório)
 DOMAIN=queridodiario.ok.org.br
-# API será acessível em: api.${DOMAIN}
-# Backend será acessível em: backend-api.${DOMAIN}
 
-# Banco de Dados (externo)
-# NOTA: QD_BACKEND_DB_URL é gerada automaticamente no docker-compose.
-# Defina apenas as variáveis individuais:
-POSTGRES_HOST=external-db
-POSTGRES_PORT=5432
-POSTGRES_DB=db
-POSTGRES_USER=user
-POSTGRES_PASSWORD=password
+# SEGURANÇA (obrigatório)
+QD_BACKEND_SECRET_KEY=sua-chave-super-secreta-django
 
-# OpenSearch (externo)
-# NOTA: QUERIDO_DIARIO_OPENSEARCH_* são geradas automaticamente no docker-compose.
-# Defina apenas as variáveis base:
-OPENSEARCH_HOST=https://external-opensearch:9200
-OPENSEARCH_USER=username
-OPENSEARCH_PASSWORD=password
+# BANCO DE DADOS - API (externo)
+QD_DATA_DB_HOST=seu-postgres-host
+QD_DATA_DB_USER=seu-usuario
+QD_DATA_DB_PASSWORD=sua-senha
+QD_DATA_DB_NAME=queridodiario
 
-# Storage (externo S3/MinIO/DigitalOcean Spaces)
-# NOTA: QUERIDO_DIARIO_FILES_ENDPOINT é gerada automaticamente no docker-compose.
-# Defina apenas as variáveis base:
-STORAGE_ENDPOINT=https://storage.example.com
-STORAGE_BUCKET=bucket
+# BANCO DE DADOS - Backend (externo)
+QD_BACKEND_DB_HOST=seu-postgres-host
+QD_BACKEND_DB_USER=seu-usuario-backend
+QD_BACKEND_DB_PASSWORD=sua-senha-backend
+QD_BACKEND_DB_NAME=backend
 
-# Segurança
-QD_BACKEND_SECRET_KEY=sua-chave-super-secreta
+# OPENSEARCH (externo)
+QUERIDO_DIARIO_OPENSEARCH_HOST=https://seu-opensearch:9200
+QUERIDO_DIARIO_OPENSEARCH_USER=usuario
+QUERIDO_DIARIO_OPENSEARCH_PASSWORD=senha
 
-# Email (Mailjet)
+# STORAGE S3/MinIO (externo)
+STORAGE_ENDPOINT=https://seu-s3.amazonaws.com
+STORAGE_ACCESS_KEY=sua-access-key
+STORAGE_ACCESS_SECRET=sua-secret-key
+STORAGE_BUCKET=queridodiariobucket
+
+# EMAIL - Mailjet
 MAILJET_API_KEY=sua-chave-mailjet
-MAILJET_SECRET_KEY=sua-chave-secreta-mailjet
+MAILJET_SECRET_KEY=sua-secret-mailjet
+DEFAULT_FROM_EMAIL=noreply@queridodiario.ok.org.br
 ```
 
 ### Infraestrutura Necessária
 
-- **Servidor**: Docker + Docker Compose + Portainer
+- **Servidor**: Docker + Docker Compose
 - **PostgreSQL**: Instância externa para dados
 - **OpenSearch**: Cluster externo para busca
-- **S3/Storage**: Serviço externo para arquivos
-- **Traefik**: Reverse proxy com SSL automático
-- **DNS**: Registros apontando para o servidor
+- **S3/Storage**: Serviço de armazenamento de arquivos
+- **DNS**: Registros A/CNAME apontando para o servidor
+
+## 🎯 Principais Melhorias da Refatoração
+
+### ✅ Simplificação Radical
+
+1. **Eliminação de scripts complexos**: Não é mais necessário gerar arquivos intermediários
+2. **Traefik integrado**: Reverse proxy e SSL fazem parte da stack principal
+3. **Configuração única**: Um arquivo `.env` para cada ambiente
+4. **Comandos diretos**: `make dev` e `make prod` fazem tudo automaticamente
+
+### ✅ Redução de Complexidade
+
+**ANTES:**
+- 6+ arquivos para gerar
+- Scripts Python complexos
+- Templates separados para diferentes componentes
+- Configuração manual de Traefik
+- Múltiplos arquivos de ambiente
+
+**DEPOIS:**
+- 1 arquivo `.env` por ambiente
+- Docker Compose direto dos templates
+- Traefik integrado na stack
+- Comandos Make simples
+
+### ✅ Desenvolvimento Local Otimizado
+
+- **HTTP local**: Sem necessidade de certificados para desenvolvimento
+- **Domínio local padrão**: `queridodiario.local` configurado automaticamente
+- **Portas expostas**: Acesso direto aos serviços para debugging
+- **Volumes persistentes**: Dados mantidos entre restarts
+
+### ✅ Produção Simplificada
+
+- **Configuração externa**: Bancos e storage externos
+- **SSL automático**: Let's Encrypt integrado
+- **Segurança**: Headers e rate limiting configurados
+- **Performance**: Limites de recursos otimizados
 
 ## 📚 Documentação Técnica
 
 Consulte a documentação detalhada em [`docs/`](docs/):
 
-### Guias de Setup
-
-- **[Deploy com Portainer](docs/portainer-deployment.md)** - Guia completo de produção
+- **[Deploy com Portainer](docs/portainer-deployment.md)** - Guia de produção
 - **[Configuração do Traefik](docs/traefik-setup.md)** - Setup de reverse proxy e SSL
 - **[Variáveis de Ambiente](docs/environment-variables.md)** - Referência completa
-
-### Características do Sistema
-
-- **Automatização Completa**: Eliminação de edição manual de configurações
-- **Separação de Ambientes**: Dev usa containers locais, prod usa serviços externos
-- **Geração Inteligente**: Transformações automáticas por ambiente
-- **Segurança**: Configurações otimizadas para produção
-- **Performance**: Limites de recursos e replicas configuráveis
+- **[Overrides](docs/overrides.md)** - Customizações avançadas
 
 ## 🔧 Troubleshooting
 
 ### Problemas Comuns
 
 ```bash
-# Arquivos não geram
-make clean-env                 # Limpar arquivos antigos
-make setup-env-dev            # Tentar novamente
+# Verificar status dos serviços
+make status
+make health
 
-# Serviços não iniciam
-docker compose ps             # Ver status
-docker compose logs [serviço] # Ver logs específicos
+# Ver logs
+make logs                     # Todos os serviços
+make logs-api                 # Apenas API
+make logs-backend             # Apenas Backend
+make logs-traefik             # Apenas Traefik
 
-# Problemas de rede
-docker network ls             # Verificar networks
-make validate                 # Validar configurações
+# Reiniciar serviços
+make restart
+
+# Limpeza completa
+make clean-all
 ```
 
 ### Comandos de Diagnóstico
 
 ```bash
 make validate                  # Validar sintaxe dos compose files
-make health                   # Verificar saúde dos serviços
-make status                   # Ver status de todos os containers
+make check-env                # Verificar variáveis obrigatórias
+make network-create           # Criar rede frontend se necessário
+```
+
+### Desenvolvimento - Acesso aos serviços
+
+Se preferir acessar diretamente pelos containers:
+
+```bash
+# Shell nos containers
+make shell-api               # Acesso ao container da API
+make shell-backend           # Acesso ao container do Backend
+
+# Reset de banco (desenvolvimento)
+make db-reset               # Roda migrações do Django
 ```
 
 ## 🤝 Contribuição
 
 Para contribuir com melhorias:
 
-1. **Edite templates**: Modifique `templates/env.complete.sample` para adicionar/modificar variáveis
-2. **Atualize scripts**: Modifique scripts em `scripts/` se necessário
-3. **Teste mudanças**: Use `make generate-dev && make dev` para testar
-4. **Regenere arquivos**: Use `make generate-all` para produção
-5. **Valide**: Execute `make validate` para verificar sintaxe
-6. **Documente**: Atualize documentação em `docs/` conforme necessário
+1. **Edite templates**: Modifique arquivos em `templates/`
+2. **Teste mudanças**: Use `make dev` para testar
+3. **Valide**: Execute `make validate`
+4. **Atualize docs**: Modifique documentação conforme necessário
 
 ### Fluxo de Desenvolvimento
 
 ```bash
 # 1. Faça suas mudanças nos templates
-vim templates/env.complete.sample
+vim templates/docker-compose.yml
+vim templates/env.prod.sample
 
-# 2. Regenere e teste
-make clean-env
+# 2. Teste
+make clean-all
 make dev
 
 # 3. Valide configurações
 make validate
-
-# 4. Teste produção
-make generate-all
+make status
 ```
 
 ## 📄 Licença
 
 Este projeto está licenciado sob os termos definidos no arquivo [LICENSE.md](LICENSE.md).
 
-## 🔧 Sistema de Templates
+---
 
-### Variáveis de Ambiente
+## 🎉 Resumo da Nova Estrutura
 
-Todas as variáveis de ambiente são gerenciadas através do template mestre `templates/env.complete.sample`. O sistema gera automaticamente arquivos de ambiente otimizados para cada ambiente:
+A refatoração do projeto resultou em uma estrutura **drasticamente mais simples**:
 
-- **Desenvolvimento**: Serviços locais, debug habilitado, CORS permissivo
-- **Produção**: Serviços externos, debug desabilitado, segurança reforçada
+- **✅ Zero geração de arquivos intermediários**
+- **✅ Traefik oficialmente parte da stack**
+- **✅ Configuração local sem HTTPS** para desenvolvimento
+- **✅ Um comando para rodar tudo** (`make dev` / `make prod`)
+- **✅ Templates como fonte única da verdade**
+- **✅ Ambiente de desenvolvimento funciona out-of-the-box**
 
-Para customizar configurações:
-
-1. **Edite `templates/env.complete.sample`** - Esta é a fonte única da verdade
-2. **Regenere arquivos** - Use `make setup-env-dev` ou `make setup-env-prod`
-3. **Para produção** - Edite o `.env.production` gerado com seus valores específicos
-
-### Sistema de Overrides
-
-O sistema suporta overrides automáticos através do arquivo `overrides.env`:
-
-```bash
-# Copie o exemplo
-cp templates/overrides.example overrides.env
-
-# Edite com suas configurações
-# Este arquivo será aplicado automaticamente em todos os comandos
-```
-
-### Docker Compose Templates
-
-O sistema usa templates para gerar configurações apropriadas:
-
-- **`templates/docker-compose.yml`**: Configuração base completa
-- **`templates/docker-compose.dev.yml`**: Overrides para desenvolvimento
-- **Geração automática**: `make generate-dev` copia os templates para uso
-
-## 🔍 Validação e Debugging
-
-```bash
-# Validar configurações
-make validate                  # Valida sintaxe dos compose files
-make health                   # Verificar saúde dos serviços
-make status                   # Ver status de todos os containers
-
-# Ver logs
-make logs                     # Logs de todos os serviços
-make logs-api                 # Logs específicos da API
-make logs-backend             # Logs específicos do Backend
-```
+O objetivo foi **eliminar complexidade desnecessária** mantendo toda a funcionalidade necessária para desenvolvimento e produção.

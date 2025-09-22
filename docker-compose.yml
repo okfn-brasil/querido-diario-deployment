@@ -63,7 +63,7 @@ services:
     networks:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f -u admin:admin http://localhost:9200/_cluster/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -73,22 +73,41 @@ services:
 
   # MinIO for file storage (Development only - excluded in production)
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: querido-diario-minio
     restart: unless-stopped
     environment:
       MINIO_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-minio-access-key}
       MINIO_SECRET_KEY: ${STORAGE_ACCESS_SECRET:-minio-secret-key}
       MINIO_DEFAULT_BUCKETS: ${STORAGE_BUCKET:-queridodiariobucket}:public
+      MINIO_ROOT_USER: minio-access-key
+      MINIO_ROOT_PASSWORD: minio-secret-key
     volumes:
       - minio-data:/data
     networks:
       - backend
+    command: [ "server", "--console-address", ":9001", "/data" ]
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
+    profiles:
+      - dev
+      - development
+
+  # Create bucket on minio. Run once.
+  minio-createbucket:
+    image: quay.io/minio/mc:RELEASE.2025-03-12T17-29-24Z
+    depends_on:
+      - minio
+    restart: on-failure
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      /usr/bin/mc mb queridodiariobucket;
+      exit 0;
+      "
     profiles:
       - dev
       - development

@@ -1,16 +1,16 @@
 # Guia de Referência - Variáveis de Ambiente
 
-> 📅 **Última atualização**: Setembro 2025
+> 📅 **Última atualização**: Setembro 2025 (Pós-refatoração)
 
 ## Visão Geral
 
-Este documento serve como referência completa para todas as variáveis de ambiente utilizadas na plataforma Querido Diário. As variáveis são organizadas por categoria e componente.
+Este documento serve como referência completa para todas as variáveis de ambiente utilizadas na plataforma Querido Diário. Após a refatoração, o processo foi drasticamente simplificado.
 
 ## Como Usar Este Guia
 
-- **Desenvolvimento**: Use `make setup-env-dev` para gerar `.env` automaticamente
-- **Produção**: Use `make setup-env-prod` para gerar `.env.production` e configure conforme este guia
-- **Template Master**: Todas as variáveis estão definidas em `templates/env.complete.sample`
+- **Desenvolvimento**: Use `make dev` (gera .env automaticamente)
+- **Produção**: Use `make setup-env-prod` para gerar `.env` e configure conforme este guia
+- **Template de Referência**: Todas as variáveis estão definidas em `templates/env.prod.sample`
 
 ## 🌐 Configuração de Domínios
 

@@ -30,9 +30,9 @@ services:
     environment:
       QD_API_URL: http://api.queridodiario.local
       QD_BACKEND_DEBUG: ${QD_BACKEND_DEBUG:-True}
-      QD_BACKEND_ALLOWED_HOSTS: *
+      QD_BACKEND_ALLOWED_HOSTS: "*"
       QD_BACKEND_ALLOWED_ORIGINS: http://localhost,http://localhost:4200,http://localhost:8000,http://localhost:8080,http://backend-api.queridodiario.local,http://api.queridodiario.local
-      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: *
+      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: "*"
       QD_BACKEND_CSRF_TRUSTED_ORIGINS: http://backend-api.queridodiario.local,http://localhost:8000
       QD_BACKEND_SECRET_KEY: local-execution-django-secret-key
       STATIC_URL: http://backend-api.queridodiario.local/api/static/
@@ -76,9 +76,9 @@ services:
     environment:
       QD_API_URL: http://api.queridodiario.local
       QD_BACKEND_DEBUG: ${QD_BACKEND_DEBUG:-True}
-      QD_BACKEND_ALLOWED_HOSTS: *
+      QD_BACKEND_ALLOWED_HOSTS: "*"
       QD_BACKEND_ALLOWED_ORIGINS: http://localhost,http://localhost:4200,http://localhost:8000,http://localhost:8080,http://backend-api.queridodiario.local,http://api.queridodiario.local
-      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: *
+      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: "*"
       QD_BACKEND_CSRF_TRUSTED_ORIGINS: http://backend-api.queridodiario.local,http://localhost:8000
       QD_BACKEND_SECRET_KEY: local-execution-django-secret-key
       STATIC_URL: http://backend-api.queridodiario.local/api/static/
@@ -94,9 +94,9 @@ services:
     environment:
       QD_API_URL: http://api.queridodiario.local
       QD_BACKEND_DEBUG: ${QD_BACKEND_DEBUG:-True}
-      QD_BACKEND_ALLOWED_HOSTS: *
+      QD_BACKEND_ALLOWED_HOSTS: "*"
       QD_BACKEND_ALLOWED_ORIGINS: http://localhost,http://localhost:4200,http://localhost:8000,http://localhost:8080,http://backend-api.queridodiario.local,http://api.queridodiario.local
-      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: *
+      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: "*"
       QD_BACKEND_CSRF_TRUSTED_ORIGINS: http://backend-api.queridodiario.local,http://localhost:8000
       QD_BACKEND_SECRET_KEY: local-execution-django-secret-key
       STATIC_URL: http://backend-api.queridodiario.local/api/static/

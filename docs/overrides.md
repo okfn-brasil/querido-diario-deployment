@@ -1,34 +1,40 @@
-# Configuração com Sobrescritas Automáticas
+# Configurações Customizadas
 
-> 📅 **Última atualização**: Setembro 2025
+> 📅 **Última atualização**: Setembro 2025 (Pós-refatoração)
 
-Este documento explica como usar o arquivo `overrides.env` para configurar valores específicos de **produção**. O arquivo `templates/overrides.example` foi simplificado e contém apenas exemplos essenciais para produção.
+Este documento explica como customizar configurações específicas para sua instalação do Querido Diário.
 
-## Como funciona o fluxo simplificado
+## Visão Geral da Nova Estrutura
 
-O sistema agora detecta **automaticamente** o arquivo `overrides.env` e aplica as sobrescritas quando ele existe:
+Após a refatoração, o sistema foi drasticamente simplificado:
 
-1. **🌐 Configuração de domínio**: Interativa ou com valor padrão
-2. **📖 Carregamento do template**: Template base com todas as variáveis
-3. **⚙️ Composição de domínio**: Aplica variáveis baseadas no domínio
-4. **🔍 Detecção automática**: Verifica se `overrides.env` existe
-5. **🔧 Aplicação de sobrescritas**: Aplica valores do arquivo (se existe)
-6. **💾 Arquivo final**: Gera arquivo de ambiente completo
+- **Desenvolvimento**: `make dev` gera automaticamente um `.env` funcional
+- **Produção**: `make setup-env-prod` gera `.env` baseado em `templates/env.prod.sample`
+- **Customização**: Edite diretamente o arquivo `.env` gerado
 
-## Como usar
+## Estrutura Simplificada
 
-### 1. Criar arquivo de sobrescritas
+### 1. Template Base
+
+O arquivo `templates/env.prod.sample` contém todas as variáveis necessárias com valores comentados ou padrão.
+
+### 2. Geração Automática
 
 ```bash
-cp templates/overrides.example overrides.env
+# Para desenvolvimento (automático, funciona out-of-the-box)
+make dev
+
+# Para produção (requer edição manual após geração)
+make setup-env-prod
 ```
 
-### 2. Configurar valores específicos
+### 3. Customização Manual
 
-Edite o arquivo `overrides.env` com seus valores:
+Após gerar o `.env`, edite diretamente com suas configurações:
 
 ```bash
-# Desenvolvimento - exemplo
+# Editar configurações específicas
+vim .env
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5433
 DEBUG=1

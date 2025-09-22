@@ -1,33 +1,33 @@
 # Configuração do Traefik
 
-> 📅 **Última atualização**: Setembro 2025  
-> ⚠️ **Versão testada**: Traefik v3.0
+> 📅 **Última atualização**: Setembro 2025 (Pós-refatoração)
+> ⚠️ **Versão**: Traefik v3.5 (integrado)
 
 ## Visão Geral
 
-O Traefik é um reverse proxy moderno que gerencia automaticamente o roteamento e certificados SSL para a plataforma Querido Diário.
+Após a refatoração, o Traefik foi **oficialmente integrado** ao docker-compose
+principal, eliminando a necessidade de configuração separada. O Traefik é
+automaticamente configurado e iniciado junto com os demais serviços.
 
-## Configuração Base
+## ✅ Principais Mudanças
 
-### docker-compose.traefik.yml
+- **Integração completa**: Traefik faz parte do `docker-compose.yml`
+- **Configuração automática**: SSL, middlewares e roteamento pré-configurados
+- **Desenvolvimento sem HTTPS**: HTTP local para facilitar desenvolvimento
+- **Produção com SSL automático**: Let's Encrypt integrado
 
-```yaml
-version: '3.8'
+## Configuração Automática
 
-services:
-  traefik:
-    image: traefik:v3.0
-    container_name: traefik
-    restart: unless-stopped
-    command:
-      # Providers
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --providers.docker.network=frontend
-      
-      # Entrypoints
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
+### Para Desenvolvimento
+
+```bash
+make dev
+```
+
+**Configuração automática:**
+- HTTP apenas (sem SSL)
+- Roteamento para `api.queridodiario.local` e `backend-api.queridodiario.local`
+- Middlewares de CORS e compressão
       
       # SSL Certificates
       - --certificatesresolvers.letsencrypt.acme.email=admin@queridodiario.ok.org.br
@@ -190,7 +190,7 @@ querido-diario-frontend:
 
 Para ajustar os middlewares:
 
-1. **Definições globais**: Edite `templates/docker-compose.traefik.example.yml`
+1. **Definições globais**: Edite `docker-compose.traefik.example.yml`
 2. **Aplicação automática**: Edite `scripts/generate-portainer-compose.py`
 3. **Regenere os arquivos**: Execute `make generate-all`
 
