@@ -1,0 +1,21 @@
+{
+  "makefile.configureOnOpen": false,
+  "python-envs.defaultEnvManager": "ms-python.python:pyenv",
+  "python-envs.pythonProjects": [],
+  "github.copilot.enable": {
+    "*": true,
+    "yaml": true,
+    "dockerfile": true,
+    "makefile": true
+  },
+  "files.associations": {
+    "docker-compose*.yml": "dockercompose",
+    "*.copilot-instructions.md": "markdown",
+    ".env*": "properties"
+  },
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json": [
+      "docker-compose*.yml"
+    ]
+  }
+}

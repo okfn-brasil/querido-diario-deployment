@@ -1,3 +1,20 @@
+# CONTEXT FOR COPILOT: This is the main docker-compose configuration
+# for Querido Diário deployment supporting both dev and prod environments.
+# 
+# Key patterns when editing:
+# - Use profiles to separate dev/prod services
+# - All web services need Traefik labels for routing
+# - Development uses local containers, production uses external services
+# - Always include health checks for critical services
+# - Use ${DOMAIN} interpolation for dynamic routing
+# - Ensure environment variables are well documented and defaulted
+# - Use volumes for persistent data storage
+# - Network segmentation between frontend and backend services
+# - Use resource limits for production services
+# - Include comments for clarity on configuration choices
+# - Keep configurations DRY by using shared environment variables
+# - Ensure security best practices (e.g., secrets management, TLS)
+
 ---
 # Querido Diário Complete Infrastructure
 # ======================================
