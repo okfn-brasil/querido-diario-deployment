@@ -129,6 +129,28 @@ services:
       - dev
       - development
 
+  # Create OpenSearch index. Run once.
+  opensearch-init:
+    image: curlimages/curl:latest
+    container_name: querido-diario-opensearch-init
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    restart: on-failure
+    volumes:
+      - ./init-scripts/opensearch/create-opensearch-index.sh:/create-index.sh:ro
+    networks:
+      - backend
+    entrypoint: ["/bin/sh", "/create-index.sh"]
+    environment:
+      OPENSEARCH_HOST: http://opensearch:9200
+      OPENSEARCH_USER: admin
+      OPENSEARCH_PASSWORD: admin
+      INDEX_NAME: querido-diario
+    profiles:
+      - dev
+      - development
+
   # Redis for caching and Celery
   redis:
     image: redis:7
