@@ -1,6 +1,6 @@
 # CONTEXT FOR COPILOT: This is the main docker-compose configuration
 # for Querido Diário deployment supporting both dev and prod environments.
-# 
+#
 # Key patterns when editing:
 # - Use profiles to separate dev/prod services
 # - All web services need Traefik labels for routing
@@ -30,12 +30,6 @@ networks:
     external: true
 
 volumes:
-  postgres-data:
-    driver: local
-  opensearch-data:
-    driver: local
-  minio-data:
-    driver: local
   redis-data:
     driver: local
   static-files:
@@ -44,113 +38,6 @@ volumes:
     driver: local
 
 services:
-  # Database Services (Development only - excluded in production)
-  postgres:
-    image: postgres:13
-    container_name: querido-diario-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./init-scripts/postgres:/docker-entrypoint-initdb.d
-    networks:
-      - backend
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d queridodiario"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    profiles:
-      - dev
-      - development
-
-  # OpenSearch for full-text search (Development only - excluded in production)
-  opensearch:
-    image: opensearchproject/opensearch:2.9.0
-    container_name: querido-diario-opensearch
-    restart: unless-stopped
-    environment:
-      - discovery.type=single-node
-      - plugins.security.ssl.http.enabled=false
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
-    volumes:
-      - opensearch-data:/usr/share/opensearch/data
-    networks:
-      - backend
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f -u admin:admin http://localhost:9200/_cluster/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    profiles:
-      - dev
-      - development
-
-  # MinIO for file storage (Development only - excluded in production)
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    container_name: querido-diario-minio
-    restart: unless-stopped
-    environment:
-      MINIO_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-minio-access-key}
-      MINIO_SECRET_KEY: ${STORAGE_ACCESS_SECRET:-minio-secret-key}
-      MINIO_DEFAULT_BUCKETS: ${STORAGE_BUCKET:-queridodiariobucket}:public
-      MINIO_ROOT_USER: minio-access-key
-      MINIO_ROOT_PASSWORD: minio-secret-key
-    volumes:
-      - minio-data:/data
-    networks:
-      - backend
-    command: [ "server", "--console-address", ":9001", "/data" ]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    profiles:
-      - dev
-      - development
-
-  # Create bucket on minio. Run once.
-  minio-createbucket:
-    image: quay.io/minio/mc:RELEASE.2025-03-12T17-29-24Z
-    depends_on:
-      - minio
-    restart: on-failure
-    entrypoint: >
-      /bin/sh -c "
-      sleep 5;
-      /usr/bin/mc mb queridodiariobucket;
-      exit 0;
-      "
-    profiles:
-      - dev
-      - development
-
-  # Create OpenSearch index. Run once.
-  opensearch-init:
-    image: curlimages/curl:latest
-    container_name: querido-diario-opensearch-init
-    depends_on:
-      opensearch:
-        condition: service_healthy
-    restart: on-failure
-    volumes:
-      - ./init-scripts/opensearch/create-opensearch-index.sh:/create-index.sh:ro
-    networks:
-      - backend
-    entrypoint: ["/bin/sh", "/create-index.sh"]
-    environment:
-      OPENSEARCH_HOST: http://opensearch:9200
-      OPENSEARCH_USER: admin
-      OPENSEARCH_PASSWORD: admin
-      INDEX_NAME: querido-diario
-    profiles:
-      - dev
-      - development
-
   # Redis for caching and Celery
   redis:
     image: redis:7
@@ -182,7 +69,7 @@ services:
       retries: 3
 
   # Querido Diário API
-  querido-diario-api:
+  api:
     image: ghcr.io/okfn-brasil/querido-diario-api:${API_IMAGE_TAG:-latest}
     container_name: querido-diario-api
     restart: unless-stopped
@@ -287,14 +174,14 @@ services:
           memory: ${API_MEMORY_RESERVATION:-512M}
 
   # Querido Diário Backend (Django)
-  querido-diario-backend:
+  backend:
     image: ghcr.io/okfn-brasil/querido-diario-backend:${BACKEND_IMAGE_TAG:-latest}
     container_name: querido-diario-backend
     restart: unless-stopped
     depends_on:
       redis:
         condition: service_healthy
-      querido-diario-api:
+      api:
         condition: service_healthy
     environment:
       # Core Django Configuration
@@ -481,7 +368,7 @@ services:
           memory: ${CELERY_WORKER_MEMORY_RESERVATION:-512M}
 
   # Data Processing Service
-  querido-diario-data-processing:
+  data-processing:
     image: ghcr.io/okfn-brasil/querido-diario-data-processing:${DATA_PROCESSING_IMAGE_TAG:-latest}
     container_name: querido-diario-data-processing
     restart: "no"  # Run on-demand for data processing tasks
