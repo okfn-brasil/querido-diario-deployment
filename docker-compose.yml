@@ -458,9 +458,9 @@ services:
       - --entrypoints.websecure.address=:443
 
       # SSL Certificates - Let's Encrypt
-      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@queridodiario.ok.org.br}
-      - --certificatesresolvers.letsencrypt.acme.storage=/acme.json
-      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --certificatesresolvers.leresolver.acme.email=${ACME_EMAIL:-admin@queridodiario.ok.org.br}
+      - --certificatesresolvers.leresolver.acme.storage=/acme.json
+      - --certificatesresolvers.leresolver.acme.httpchallenge.entrypoint=web
 
       # Logging
       - --log.level=${TRAEFIK_LOG_LEVEL:-INFO}
@@ -521,7 +521,7 @@ services:
       # Isso gerencia o roteamento do domínio principal que era feito anteriormente pelo nginx
       - "traefik.http.routers.frontend-main.rule=Host(`${DOMAIN}`)"
       - "traefik.http.routers.frontend-main.entrypoints=web,websecure"
-      - "traefik.http.routers.frontend-main.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.frontend-main.tls.certresolver=leresolver"
       - "traefik.http.routers.frontend-main.middlewares=security-headers,compression"
       - "traefik.http.routers.frontend-main.service=frontend-netlify"
       - "traefik.http.routers.frontend-main.priority=1"
@@ -530,7 +530,7 @@ services:
       # Redirecionamento WWW para domínios principais (se usando variantes www)
       - "traefik.http.routers.frontend-www-redirect.rule=Host(`www.${DOMAIN}`)"
       - "traefik.http.routers.frontend-www-redirect.entrypoints=web,websecure"
-      - "traefik.http.routers.frontend-www-redirect.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.frontend-www-redirect.tls.certresolver=leresolver"
       - "traefik.http.routers.frontend-www-redirect.middlewares=www-to-non-www"
       - "traefik.http.routers.frontend-www-redirect.priority=10"
 

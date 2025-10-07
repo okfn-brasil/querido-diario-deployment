@@ -270,6 +270,16 @@ services:
       - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
       - "traefik.http.middlewares.security-headers.headers.stsPreload=true"
 
+      # Rate Limiting (for development - more permissive)
+      - "traefik.http.middlewares.rate-limit.ratelimit.burst=1000"
+      - "traefik.http.middlewares.rate-limit.ratelimit.average=500"
+      - "traefik.http.middlewares.rate-limit.ratelimit.period=1m"
+
+      # API Rate Limiting (for development - more permissive)
+      - "traefik.http.middlewares.api-rate-limit.ratelimit.burst=500"
+      - "traefik.http.middlewares.api-rate-limit.ratelimit.average=250"
+      - "traefik.http.middlewares.api-rate-limit.ratelimit.period=1m"
+
       # Compression
       - "traefik.http.middlewares.compression.compress=true"
 
