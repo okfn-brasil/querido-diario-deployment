@@ -373,6 +373,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    labels:
+      - "traefik.enable=false"
     environment:
       # Core Django Configuration
       QD_BACKEND_SECRET_KEY: ${QD_BACKEND_SECRET_KEY}
@@ -425,6 +427,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    labels:
+      - "traefik.enable=false"
     environment:
       # Core Django Configuration
       QD_BACKEND_SECRET_KEY: ${QD_BACKEND_SECRET_KEY}
