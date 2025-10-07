@@ -74,6 +74,9 @@ services:
     container_name: querido-diario-api
     restart: unless-stopped
     environment:
+      # Logging Configuration
+      LOG_LEVEL: ${API_LOG_LEVEL:-INFO}
+
       # OpenSearch Configuration
       QUERIDO_DIARIO_OPENSEARCH_HOST: ${QUERIDO_DIARIO_OPENSEARCH_HOST:-http://opensearch:9200}
       QUERIDO_DIARIO_OPENSEARCH_PASSWORD: ${QUERIDO_DIARIO_OPENSEARCH_PASSWORD:-admin}

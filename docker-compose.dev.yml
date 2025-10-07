@@ -3,6 +3,9 @@
 # Use with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --profile dev
 services:
   api:
+    environment:
+      # Logging Configuration
+      LOG_LEVEL: ${API_LOG_LEVEL:-DEBUG}
     depends_on:
       postgres:
         condition: service_healthy
