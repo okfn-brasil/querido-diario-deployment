@@ -480,6 +480,9 @@ services:
       - frontend
 
     labels:
+      # Enable Traefik for this container (required for middleware definitions to be recognized)
+      - "traefik.enable=true"
+
       # Redirecionamento HTTP -> HTTPS para todos os hosts
       - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
       - "traefik.http.routers.http-catchall.entrypoints=web"
