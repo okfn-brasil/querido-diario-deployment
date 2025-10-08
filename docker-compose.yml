@@ -489,11 +489,11 @@ services:
       # Middlewares Personalizados - Definições Globais
       # Estes middlewares ficam disponíveis para uso em qualquer serviço
 
-      # CORS Headers
-      - "traefik.http.middlewares.cors-headers.headers.accesscontrolallowmethods=GET,POST,OPTIONS,PUT,DELETE"
-      - "traefik.http.middlewares.cors-headers.headers.accesscontrolalloworigin=https://${DOMAIN},https://querido-diario-plataforma.netlify.app"
-      - "traefik.http.middlewares.cors-headers.headers.accesscontrolallowcredentials=true"
-      - "traefik.http.middlewares.cors-headers.headers.accesscontrolmaxage=3600"
+      # CORS Headers (Traefik v3 syntax)
+      - "traefik.http.middlewares.cors-headers.headers.accessControlAllowMethods=GET,POST,OPTIONS,PUT,DELETE"
+      - "traefik.http.middlewares.cors-headers.headers.accessControlAllowOriginList=https://${DOMAIN},https://querido-diario-plataforma.netlify.app"
+      - "traefik.http.middlewares.cors-headers.headers.accessControlAllowCredentials=true"
+      - "traefik.http.middlewares.cors-headers.headers.accessControlMaxAge=3600"
 
       # Rate Limiting
       - "traefik.http.middlewares.rate-limit.ratelimit.burst=100"

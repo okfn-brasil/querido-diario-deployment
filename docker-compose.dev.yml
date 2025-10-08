@@ -252,14 +252,17 @@ services:
       - frontend
 
     labels:
+      # Enable Traefik for this container (required for middleware definitions to be recognized)
+      - "traefik.enable=true"
+
       # Middlewares Personalizados - Definições Globais
       # Estes middlewares ficam disponíveis para uso em qualquer serviço
 
-      # CORS Headers - Validate
-      - "traefik.http.middlewares.cors-headers.headers.accesscontrolallowmethods=GET,POST,OPTIONS,PUT,DELETE"
-      - "traefik.http.middlewares.cors-headers.headers.accesscontrolalloworigin=http://${DOMAIN:-queridodiario.local},http://localhost"
-      - "traefik.http.middlewares.cors-headers.headers.accesscontrolallowcredentials=true"
-      - "traefik.http.middlewares.cors-headers.headers.accesscontrolmaxage=3600"
+      # CORS Headers (Traefik v3 syntax)
+      - "traefik.http.middlewares.cors-headers.headers.accessControlAllowMethods=GET,POST,OPTIONS,PUT,DELETE"
+      - "traefik.http.middlewares.cors-headers.headers.accessControlAllowOriginList=http://${DOMAIN:-queridodiario.local},http://localhost"
+      - "traefik.http.middlewares.cors-headers.headers.accessControlAllowCredentials=true"
+      - "traefik.http.middlewares.cors-headers.headers.accessControlMaxAge=3600"
 
       # Security Headers - Validate
       - "traefik.http.middlewares.security-headers.headers.frameDeny=true"
