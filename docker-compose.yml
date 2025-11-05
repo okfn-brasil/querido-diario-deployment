@@ -134,7 +134,7 @@ services:
       THEMED_EXCERPT_TFIDF_SCORE_FIELD: ${THEMED_EXCERPT_TFIDF_SCORE_FIELD:-excerpt_tfidf_score}
 
       # API Configuration
-      QUERIDO_DIARIO_API_ROOT_PATH: ${QUERIDO_DIARIO_API_ROOT_PATH:-/api}
+      QUERIDO_DIARIO_API_ROOT_PATH: ${QUERIDO_DIARIO_API_ROOT_PATH:-}
 
       # CORS Configuration
       # TODO: Revisar CORS no futuro
@@ -152,16 +152,27 @@ services:
       - "traefik.http.routers.querido-diario-api.rule=Host(`api.${DOMAIN}`)"
       - "traefik.http.routers.querido-diario-api.entrypoints=web,websecure"
       - "traefik.http.routers.querido-diario-api.tls.certresolver=${CERT_RESOLVER:-leresolver}"
-      - "traefik.http.routers.querido-diario-api.middlewares=cors-headers,api-rate-limit,security-headers,compression"
+      - "traefik.http.routers.querido-diario-api.middlewares=api-strip-prefix,cors-headers,api-rate-limit,security-headers,compression"
       - "traefik.http.services.querido-diario-api.loadbalancer.server.port=8080"
 
-      # Roteamento de caminho da API no domínio principal (/api/* no domínio principal)
+      # Roteamento de caminho da API no domínio principal (/api/* redireciona para api.domain com CORS)
       - "traefik.http.routers.querido-diario-api-path.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.querido-diario-api-path.entrypoints=web,websecure"
       - "traefik.http.routers.querido-diario-api-path.tls.certresolver=${CERT_RESOLVER:-leresolver}"
-      - "traefik.http.routers.querido-diario-api-path.middlewares=cors-headers,api-rate-limit,security-headers,compression"
-      - "traefik.http.routers.querido-diario-api-path.service=querido-diario-api"
+      - "traefik.http.routers.querido-diario-api-path.middlewares=cors-redirect,api-redirect"
       - "traefik.http.routers.querido-diario-api-path.priority=100"
+
+      # Redirecionamento www.api.domain para api.domain
+      # IMPORTANTE: Exclui /.well-known/acme-challenge/ para permitir validação Let's Encrypt
+      - "traefik.http.routers.querido-diario-api-www-redirect.rule=Host(`www.api.${DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge/`)"
+      - "traefik.http.routers.querido-diario-api-www-redirect.entrypoints=web,websecure"
+      - "traefik.http.routers.querido-diario-api-www-redirect.tls.certresolver=${CERT_RESOLVER:-leresolver}"
+      - "traefik.http.routers.querido-diario-api-www-redirect.middlewares=www-api-to-api"
+      - "traefik.http.routers.querido-diario-api-www-redirect.priority=200"
+
+      - "traefik.http.middlewares.www-api-to-api.redirectregex.regex=^https://www\\.api\\.(.*)"
+      - "traefik.http.middlewares.www-api-to-api.redirectregex.replacement=https://api.$${1}"
+      - "traefik.http.middlewares.www-api-to-api.redirectregex.permanent=true"
 
       - "traefik.docker.network=frontend"
     healthcheck:
@@ -240,6 +251,18 @@ services:
       - "traefik.http.routers.querido-diario-backend.tls.certresolver=${CERT_RESOLVER:-leresolver}"
       - "traefik.http.routers.querido-diario-backend.middlewares=cors-headers,api-rate-limit,security-headers,compression"
       - "traefik.http.services.querido-diario-backend.loadbalancer.server.port=8000"
+
+      # Redirecionamento www.backend-api.domain para backend-api.domain
+      # IMPORTANTE: Exclui /.well-known/acme-challenge/ para permitir validação Let's Encrypt
+      - "traefik.http.routers.querido-diario-backend-www-redirect.rule=Host(`www.backend-api.${DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge/`)"
+      - "traefik.http.routers.querido-diario-backend-www-redirect.entrypoints=web,websecure"
+      - "traefik.http.routers.querido-diario-backend-www-redirect.tls.certresolver=${CERT_RESOLVER:-leresolver}"
+      - "traefik.http.routers.querido-diario-backend-www-redirect.middlewares=www-backend-api-to-backend-api"
+      - "traefik.http.routers.querido-diario-backend-www-redirect.priority=200"
+
+      - "traefik.http.middlewares.www-backend-api-to-backend-api.redirectregex.regex=^https://www\\.backend-api\\.(.*)"
+      - "traefik.http.middlewares.www-backend-api-to-backend-api.redirectregex.replacement=https://backend-api.$${1}"
+      - "traefik.http.middlewares.www-backend-api-to-backend-api.redirectregex.permanent=true"
 
       - "traefik.docker.network=frontend"
     command: gunicorn config.wsgi:application -w 2 -b :8000 --log-level info
@@ -488,15 +511,18 @@ services:
       - "traefik.http.routers.http-catchall.entrypoints=web"
       - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=false"
 
       # Middlewares Personalizados - Definições Globais
       # Estes middlewares ficam disponíveis para uso em qualquer serviço
 
       # CORS Headers (Traefik v3 syntax)
-      - "traefik.http.middlewares.cors-headers.headers.accessControlAllowMethods=GET,POST,OPTIONS,PUT,DELETE"
-      - "traefik.http.middlewares.cors-headers.headers.accessControlAllowOriginList=https://${DOMAIN},https://querido-diario-plataforma.netlify.app"
+      - "traefik.http.middlewares.cors-headers.headers.accessControlAllowMethods=GET,POST,OPTIONS,PUT,DELETE,PATCH"
+      - "traefik.http.middlewares.cors-headers.headers.accessControlAllowOriginList=https://${DOMAIN},https://www.${DOMAIN},https://api.${DOMAIN},https://backend-api.${DOMAIN},https://backend.${DOMAIN},https://querido-diario-plataforma.netlify.app"
+      - "traefik.http.middlewares.cors-headers.headers.accessControlAllowHeaders=Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers"
       - "traefik.http.middlewares.cors-headers.headers.accessControlAllowCredentials=true"
       - "traefik.http.middlewares.cors-headers.headers.accessControlMaxAge=3600"
+      - "traefik.http.middlewares.cors-headers.headers.accessControlExposeHeaders=Content-Length,Content-Range"
 
       # Rate Limiting
       - "traefik.http.middlewares.rate-limit.ratelimit.burst=100"
@@ -520,6 +546,23 @@ services:
       # Compression
       - "traefik.http.middlewares.compression.compress=true"
 
+      # API Redirect Middleware - Redirect /api/* to api.domain with CORS headers
+      - "traefik.http.middlewares.api-redirect.redirectregex.regex=^https?://([^/]+)/api/(.*)"
+      - "traefik.http.middlewares.api-redirect.redirectregex.replacement=https://api.$${1}/$${2}"
+      - "traefik.http.middlewares.api-redirect.redirectregex.permanent=false"
+
+      # API Strip api path prefix - Strip '/api'from requests to api.domain.
+      - "traefik.http.middlewares.api-strip-prefix.stripprefix.prefixes=/api"
+
+      # CORS for redirects - separate middleware that adds CORS to redirect responses
+      - "traefik.http.middlewares.cors-redirect.headers.accessControlAllowMethods=GET,POST,OPTIONS,PUT,DELETE,PATCH"
+      - "traefik.http.middlewares.cors-redirect.headers.accessControlAllowOriginList=https://${DOMAIN},https://www.${DOMAIN},https://api.${DOMAIN},https://backend-api.${DOMAIN},https://backend.${DOMAIN},https://querido-diario-plataforma.netlify.app"
+      - "traefik.http.middlewares.cors-redirect.headers.accessControlAllowHeaders=Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers"
+      - "traefik.http.middlewares.cors-redirect.headers.accessControlAllowCredentials=true"
+      - "traefik.http.middlewares.cors-redirect.headers.accessControlMaxAge=3600"
+      - "traefik.http.middlewares.cors-redirect.headers.accessControlExposeHeaders=Content-Length,Content-Range"
+      - "traefik.http.middlewares.cors-redirect.headers.addVaryHeader=true"
+
       # Roteamento do frontend - Site principal para Netlify (substituindo configuração nginx)
       # Isso gerencia o roteamento do domínio principal que era feito anteriormente pelo nginx
       - "traefik.http.routers.frontend-main.rule=Host(`${DOMAIN}`)"
@@ -530,8 +573,13 @@ services:
       - "traefik.http.routers.frontend-main.priority=1"
       - "traefik.http.services.frontend-netlify.loadbalancer.server.url=https://querido-diario-plataforma.netlify.app"
 
-      # Redirecionamento WWW para domínios principais (se usando variantes www)
-      - "traefik.http.routers.frontend-www-redirect.rule=Host(`www.${DOMAIN}`)"
+      # Redirecionamento WWW para domínios principais
+      # IMPORTANTE: Cloudflare Free/Pro não pode emitir certificados SSL para subdomínios de segundo nível
+      # como www.queridodiario.ok.org.br. Por isso, www.* DEVE usar DNS-only (gray cloud) no Cloudflare
+      # e o SSL deve ser gerenciado pelo Traefik via Let's Encrypt.
+      # Isso se aplica a todos os subdomínios multi-nível (www.*, api.*, backend-api.*, etc.)
+      # IMPORTANTE: Exclui /.well-known/acme-challenge/ para permitir validação Let's Encrypt
+      - "traefik.http.routers.frontend-www-redirect.rule=Host(`www.${DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge/`)"
       - "traefik.http.routers.frontend-www-redirect.entrypoints=web,websecure"
       - "traefik.http.routers.frontend-www-redirect.tls.certresolver=leresolver"
       - "traefik.http.routers.frontend-www-redirect.middlewares=www-to-non-www"
