@@ -154,30 +154,24 @@ services:
 
       # Roteamento de subdomínio da API (api.dominio)
       - "traefik.http.routers.querido-diario-api.rule=Host(`api.${DOMAIN}`)"
-      - "traefik.http.routers.querido-diario-api.entrypoints=web,websecure"
+      - "traefik.http.routers.querido-diario-api.entrypoints=websecure"
       - "traefik.http.routers.querido-diario-api.tls.certresolver=${CERT_RESOLVER:-leresolver}"
       - "traefik.http.routers.querido-diario-api.middlewares=api-strip-prefix,cors-headers,api-rate-limit,security-headers,compression"
-      # - "traefik.http.routers.querido-diario-api.middlewares=api-strip-prefix,compression"
       - "traefik.http.services.querido-diario-api.loadbalancer.server.port=8080"
 
       # Roteamento de caminho da API no domínio principal (/api/* no domínio principal)
       - "traefik.http.routers.querido-diario-api-path.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.querido-diario-api-path.entrypoints=web,websecure"
+      - "traefik.http.routers.querido-diario-api-path.entrypoints=websecure"
       - "traefik.http.routers.querido-diario-api-path.tls.certresolver=${CERT_RESOLVER:-leresolver}"
       - "traefik.http.routers.querido-diario-api-path.middlewares=cors-redirect,api-redirect"
-      # - "traefik.http.routers.querido-diario-api-path.middlewares=api-redirect"
       - "traefik.http.routers.querido-diario-api-path.priority=100"
 
-      # Redirecionamento www.api.domain para api.domain
-      - "traefik.http.routers.querido-diario-api-www-redirect.rule=Host(`www.api.${DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge/`)"
-      - "traefik.http.routers.querido-diario-api-www-redirect.entrypoints=web,websecure"
+      # Redirecionamento www.api.domain para api.domain (HTTPS)
+      - "traefik.http.routers.querido-diario-api-www-redirect.rule=Host(`www.api.${DOMAIN}`)"
+      - "traefik.http.routers.querido-diario-api-www-redirect.entrypoints=websecure"
       - "traefik.http.routers.querido-diario-api-www-redirect.tls.certresolver=${CERT_RESOLVER:-leresolver}"
-      - "traefik.http.routers.querido-diario-api-www-redirect.middlewares=www-api-to-api"
+      - "traefik.http.routers.querido-diario-api-www-redirect.middlewares=www-to-non-www"
       - "traefik.http.routers.querido-diario-api-www-redirect.priority=200"
-
-      - "traefik.http.middlewares.www-api-to-api.redirectregex.regex=^https://www\\.api\\.(.*)"
-      - "traefik.http.middlewares.www-api-to-api.redirectregex.replacement=https://api.$${1}"
-      - "traefik.http.middlewares.www-api-to-api.redirectregex.permanent=true"
 
       - "traefik.docker.network=frontend"
     healthcheck:
@@ -252,21 +246,17 @@ services:
 
       # Roteamento de subdomínio do Backend (backend-api.dominio)
       - "traefik.http.routers.querido-diario-backend.rule=Host(`backend-api.${DOMAIN}`)"
-      - "traefik.http.routers.querido-diario-backend.entrypoints=web,websecure"
+      - "traefik.http.routers.querido-diario-backend.entrypoints=websecure"
       - "traefik.http.routers.querido-diario-backend.tls.certresolver=${CERT_RESOLVER:-leresolver}"
       - "traefik.http.routers.querido-diario-backend.middlewares=cors-headers,api-rate-limit,security-headers,compression"
       - "traefik.http.services.querido-diario-backend.loadbalancer.server.port=8000"
 
-      # Redirecionamento www.backend-api.domain para backend-api.domain
-      - "traefik.http.routers.querido-diario-backend-www-redirect.rule=Host(`www.backend-api.${DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge/`)"
-      - "traefik.http.routers.querido-diario-backend-www-redirect.entrypoints=web,websecure"
+      # Redirecionamento www.backend-api.domain para backend-api.domain (HTTPS)
+      - "traefik.http.routers.querido-diario-backend-www-redirect.rule=Host(`www.backend-api.${DOMAIN}`)"
+      - "traefik.http.routers.querido-diario-backend-www-redirect.entrypoints=websecure"
       - "traefik.http.routers.querido-diario-backend-www-redirect.tls.certresolver=${CERT_RESOLVER:-leresolver}"
-      - "traefik.http.routers.querido-diario-backend-www-redirect.middlewares=www-backend-api-to-backend-api"
+      - "traefik.http.routers.querido-diario-backend-www-redirect.middlewares=www-to-non-www"
       - "traefik.http.routers.querido-diario-backend-www-redirect.priority=200"
-
-      - "traefik.http.middlewares.www-backend-api-to-backend-api.redirectregex.regex=^https://www\\.backend-api\\.(.*)"
-      - "traefik.http.middlewares.www-backend-api-to-backend-api.redirectregex.replacement=https://backend-api.$${1}"
-      - "traefik.http.middlewares.www-backend-api-to-backend-api.redirectregex.permanent=true"
 
       - "traefik.docker.network=frontend"
     command: gunicorn config.wsgi:application -w 2 -b :8000 --log-level info
@@ -512,12 +502,18 @@ services:
       # Enable Traefik for this container (required for middleware definitions to be recognized)
       - "traefik.enable=true"
 
-      # Redirecionamento HTTP -> HTTPS para todos os hosts
-      - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
+      # Router específico para ACME challenges (HTTP apenas, sem redirect)
+      - "traefik.http.routers.acme-challenge.rule=PathPrefix(`/.well-known/acme-challenge/`)"
+      - "traefik.http.routers.acme-challenge.entrypoints=web"
+      - "traefik.http.routers.acme-challenge.priority=999"
+
+      # Redirecionamento HTTP -> HTTPS para todos os hosts (exceto ACME)
+      - "traefik.http.routers.http-catchall.rule=PathPrefix(`/`) && !PathPrefix(`/.well-known/acme-challenge/`)"
       - "traefik.http.routers.http-catchall.entrypoints=web"
       - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+      - "traefik.http.routers.http-catchall.priority=1"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=false"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
 
       - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik-ic.ok.org.br`)" # Coloque o Seu Dominio do Traefik Aqui
       - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
@@ -575,14 +571,15 @@ services:
       - "traefik.http.middlewares.cors-redirect.headers.accessControlExposeHeaders=Content-Length,Content-Range"
       - "traefik.http.middlewares.cors-redirect.headers.addVaryHeader=true"
 
-      - "traefik.http.middlewares.www-to-non-www.redirectregex.regex=^https://www\\.(.*)"
+      # Middleware global para redirecionamento www -> non-www
+      - "traefik.http.middlewares.www-to-non-www.redirectregex.regex=^https?://www\\.(.*)"
       - "traefik.http.middlewares.www-to-non-www.redirectregex.replacement=https://$${1}"
       - "traefik.http.middlewares.www-to-non-www.redirectregex.permanent=true"
 
       # Roteamento do frontend - Site principal para Netlify (substituindo configuração nginx)
       # Isso gerencia o roteamento do domínio principal que era feito anteriormente pelo nginx
       - "traefik.http.routers.qd-frontend-main.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.qd-frontend-main.entrypoints=web,websecure"
+      - "traefik.http.routers.qd-frontend-main.entrypoints=websecure"
       - "traefik.http.routers.qd-frontend-main.tls.certresolver=leresolver"
       - "traefik.http.routers.qd-frontend-main.middlewares=security-headers,compression"
       - "traefik.http.routers.qd-frontend-main.service=qd-frontend-netlify"
@@ -594,20 +591,14 @@ services:
       # como www.queridodiario.ok.org.br. Por isso, www.* DEVE usar DNS-only (gray cloud) no Cloudflare
       # e o SSL deve ser gerenciado pelo Traefik via Let's Encrypt.
       # Isso se aplica a todos os subdomínios multi-nível (www.*, api.*, backend-api.*, etc.)
-      # WWW Redirect Router - with proper ACME exclusion
+      
+      # WWW Redirect Router (HTTPS) - redireciona www.domain para domain
       - "traefik.http.routers.qd-frontend-www-redirect.rule=Host(`www.${DOMAIN}`)"
       - "traefik.http.routers.qd-frontend-www-redirect.entrypoints=websecure"
       - "traefik.http.routers.qd-frontend-www-redirect.tls.certresolver=leresolver"
       - "traefik.http.routers.qd-frontend-www-redirect.middlewares=www-to-non-www"
       - "traefik.http.routers.qd-frontend-www-redirect.service=qd-frontend-www-noop"
       - "traefik.http.routers.qd-frontend-www-redirect.priority=10"
-
-      # WWW HTTP to HTTPS (for ACME challenges)
-      - "traefik.http.routers.qd-frontend-www-http.rule=Host(`www.${DOMAIN}`)"
-      - "traefik.http.routers.qd-frontend-www-http.entrypoints=web"
-      - "traefik.http.routers.qd-frontend-www-http.middlewares=redirect-to-https"
-      - "traefik.http.routers.qd-frontend-www-http.service=qd-frontend-www-noop"
-      - "traefik.http.routers.qd-frontend-www-http.priority=10"
 
       # Define a noop service for www (required for redirect-only routers)
       - "traefik.http.services.qd-frontend-www-noop.loadbalancer.server.url=http://127.0.0.1:9999"
