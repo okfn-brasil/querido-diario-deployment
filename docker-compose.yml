@@ -53,6 +53,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    labels:
+      - "traefik.enable=false"
 
   # Apache Tika Server for text extraction
   apache-tika:
@@ -62,6 +64,8 @@ services:
     command: java -jar /tika-server.jar
     networks:
       - backend
+    labels:
+      - "traefik.enable=false"
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9998/version || exit 1"]
       interval: 30s
@@ -153,17 +157,18 @@ services:
       - "traefik.http.routers.querido-diario-api.entrypoints=web,websecure"
       - "traefik.http.routers.querido-diario-api.tls.certresolver=${CERT_RESOLVER:-leresolver}"
       - "traefik.http.routers.querido-diario-api.middlewares=api-strip-prefix,cors-headers,api-rate-limit,security-headers,compression"
+      # - "traefik.http.routers.querido-diario-api.middlewares=api-strip-prefix,compression"
       - "traefik.http.services.querido-diario-api.loadbalancer.server.port=8080"
 
-      # Roteamento de caminho da API no domínio principal (/api/* redireciona para api.domain com CORS)
+      # Roteamento de caminho da API no domínio principal (/api/* no domínio principal)
       - "traefik.http.routers.querido-diario-api-path.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
       - "traefik.http.routers.querido-diario-api-path.entrypoints=web,websecure"
       - "traefik.http.routers.querido-diario-api-path.tls.certresolver=${CERT_RESOLVER:-leresolver}"
       - "traefik.http.routers.querido-diario-api-path.middlewares=cors-redirect,api-redirect"
+      # - "traefik.http.routers.querido-diario-api-path.middlewares=api-redirect"
       - "traefik.http.routers.querido-diario-api-path.priority=100"
 
       # Redirecionamento www.api.domain para api.domain
-      # IMPORTANTE: Exclui /.well-known/acme-challenge/ para permitir validação Let's Encrypt
       - "traefik.http.routers.querido-diario-api-www-redirect.rule=Host(`www.api.${DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge/`)"
       - "traefik.http.routers.querido-diario-api-www-redirect.entrypoints=web,websecure"
       - "traefik.http.routers.querido-diario-api-www-redirect.tls.certresolver=${CERT_RESOLVER:-leresolver}"
@@ -201,7 +206,7 @@ services:
       # Core Django Configuration
       QD_BACKEND_SECRET_KEY: ${QD_BACKEND_SECRET_KEY}
       QD_BACKEND_DEBUG: ${QD_BACKEND_DEBUG:-False}
-      QD_BACKEND_ALLOWED_HOSTS: ${QD_BACKEND_ALLOWED_HOSTS:-backend-api.${DOMAIN}}
+      QD_BACKEND_ALLOWED_HOSTS: ${QD_BACKEND_ALLOWED_HOSTS:-backend-api.${DOMAIN}},api.${DOMAIN},${DOMAIN},localhost
 
       # Validar
       DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-config.settings}
@@ -210,9 +215,9 @@ services:
       QD_BACKEND_DB_URL: postgres://${QD_BACKEND_DB_USER:-admin}:${QD_BACKEND_DB_PASSWORD:-admin}@${QD_BACKEND_DB_HOST:-postgres}:${QD_BACKEND_DB_PORT:-5432}/${QD_BACKEND_DB_NAME:-backend}
 
       # CORS Configuration
-      QD_BACKEND_ALLOWED_ORIGINS: ${QD_BACKEND_ALLOWED_ORIGINS:-https://${DOMAIN}}
-      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: ${QD_BACKEND_ALLOWED_ORIGIN_REGEXES:-}
-      QD_BACKEND_CSRF_TRUSTED_ORIGINS: ${QD_BACKEND_CSRF_TRUSTED_ORIGINS:-https://backend-api.${DOMAIN}}
+      QD_BACKEND_ALLOWED_ORIGINS: ${QD_BACKEND_ALLOWED_ORIGINS:-*}
+      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: ${QD_BACKEND_ALLOWED_ORIGIN_REGEXES:-*}
+      QD_BACKEND_CSRF_TRUSTED_ORIGINS: ${QD_BACKEND_CSRF_TRUSTED_ORIGINS:-*}
 
       # API Configuration
       QD_API_THEME: ${QD_API_THEME:-Tecnologias%20na%20Educação}
@@ -253,7 +258,6 @@ services:
       - "traefik.http.services.querido-diario-backend.loadbalancer.server.port=8000"
 
       # Redirecionamento www.backend-api.domain para backend-api.domain
-      # IMPORTANTE: Exclui /.well-known/acme-challenge/ para permitir validação Let's Encrypt
       - "traefik.http.routers.querido-diario-backend-www-redirect.rule=Host(`www.backend-api.${DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge/`)"
       - "traefik.http.routers.querido-diario-backend-www-redirect.entrypoints=web,websecure"
       - "traefik.http.routers.querido-diario-backend-www-redirect.tls.certresolver=${CERT_RESOLVER:-leresolver}"
@@ -286,8 +290,6 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    labels:
-      - "traefik.enable=false"
     environment:
       # Core Django Configuration
       QD_BACKEND_SECRET_KEY: ${QD_BACKEND_SECRET_KEY}
@@ -301,9 +303,9 @@ services:
       QD_BACKEND_DB_URL: postgres://${QD_BACKEND_DB_USER:-admin}:${QD_BACKEND_DB_PASSWORD:-admin}@${QD_BACKEND_DB_HOST:-postgres}:${QD_BACKEND_DB_PORT:-5432}/${QD_BACKEND_DB_NAME:-backend}
 
       # CORS Configuration
-      QD_BACKEND_ALLOWED_ORIGINS: ${QD_BACKEND_ALLOWED_ORIGINS:-https://${DOMAIN}}
-      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: ${QD_BACKEND_ALLOWED_ORIGIN_REGEXES:-}
-      QD_BACKEND_CSRF_TRUSTED_ORIGINS: ${QD_BACKEND_CSRF_TRUSTED_ORIGINS:-https://backend-api.${DOMAIN}}
+      QD_BACKEND_ALLOWED_ORIGINS: ${QD_BACKEND_ALLOWED_ORIGINS:-*}
+      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: ${QD_BACKEND_ALLOWED_ORIGIN_REGEXES:-*}
+      QD_BACKEND_CSRF_TRUSTED_ORIGINS: ${QD_BACKEND_CSRF_TRUSTED_ORIGINS:-*}
 
       # API Configuration
       QD_API_THEME: ${QD_API_THEME:-Tecnologias%20na%20Educação}
@@ -331,6 +333,8 @@ services:
     networks:
       - backend
     command: celery -A config beat -l INFO
+    labels:
+      - "traefik.enable=false"
 
   # Celery Worker
   celery-worker:
@@ -340,8 +344,6 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    labels:
-      - "traefik.enable=false"
     environment:
       # Core Django Configuration
       QD_BACKEND_SECRET_KEY: ${QD_BACKEND_SECRET_KEY}
@@ -355,9 +357,9 @@ services:
       QD_BACKEND_DB_URL: postgres://${QD_BACKEND_DB_USER:-admin}:${QD_BACKEND_DB_PASSWORD:-admin}@${QD_BACKEND_DB_HOST:-postgres}:${QD_BACKEND_DB_PORT:-5432}/${QD_BACKEND_DB_NAME:-backend}
 
       # CORS Configuration
-      QD_BACKEND_ALLOWED_ORIGINS: ${QD_BACKEND_ALLOWED_ORIGINS:-https://${DOMAIN}}
-      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: ${QD_BACKEND_ALLOWED_ORIGIN_REGEXES:-}
-      QD_BACKEND_CSRF_TRUSTED_ORIGINS: ${QD_BACKEND_CSRF_TRUSTED_ORIGINS:-https://backend-api.${DOMAIN}}
+      QD_BACKEND_ALLOWED_ORIGINS: ${QD_BACKEND_ALLOWED_ORIGINS:-*}
+      QD_BACKEND_ALLOWED_ORIGIN_REGEXES: ${QD_BACKEND_ALLOWED_ORIGIN_REGEXES:-*}
+      QD_BACKEND_CSRF_TRUSTED_ORIGINS: ${QD_BACKEND_CSRF_TRUSTED_ORIGINS:-*}
 
       # API Configuration
       QD_API_THEME: ${QD_API_THEME:-Tecnologias%20na%20Educação}
@@ -385,6 +387,8 @@ services:
     networks:
       - backend
     command: celery -A config worker -l INFO
+    labels:
+      - "traefik.enable=false"
     deploy:
       replicas: ${CELERY_WORKER_REPLICAS:-1}
       resources:
@@ -436,6 +440,8 @@ services:
       - backend
     profiles:
       - processing  # Use docker compose --profile processing up to include this service
+    labels:
+      - "traefik.enable=false"
 
 
   # Docker Compose para Traefik - Reverse Proxy
@@ -513,21 +519,21 @@ services:
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=false"
 
-      # Middlewares Personalizados - Definições Globais
-      # Estes middlewares ficam disponíveis para uso em qualquer serviço
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik-ic.ok.org.br`)" # Coloque o Seu Dominio do Traefik Aqui
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=leresolver"
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=okbr:$$2y$$05$$Y4i/8exSJ9EL6DUJOj.cBOjmMN6NNH1rO5npB2f0ZDqcrcfuOwL02,diraol:$$apr1$$wUG8TRFh$$oiJs7xV5mY6cn9bSWqxRf1" #Coloque a Senha do Traefik Aqui Nao Remova As Aspas
+      - "traefik.http.routers.traefik-dashboard.middlewares=traefik-auth"
 
       # CORS Headers (Traefik v3 syntax)
       - "traefik.http.middlewares.cors-headers.headers.accessControlAllowMethods=GET,POST,OPTIONS,PUT,DELETE,PATCH"
-      - "traefik.http.middlewares.cors-headers.headers.accessControlAllowOriginList=https://${DOMAIN},https://www.${DOMAIN},https://api.${DOMAIN},https://backend-api.${DOMAIN},https://backend.${DOMAIN},https://querido-diario-plataforma.netlify.app"
+      # - "traefik.http.middlewares.cors-headers.headers.accessControlAllowOriginList=https://www.${DOMAIN},https://${DOMAIN},https://api.${DOMAIN},https://backend-api.${DOMAIN},https://backend.${DOMAIN},https://querido-diario-plataforma.netlify.app,https://diariosdoclima.org.br,https://backend-api.diariosdoclima.org.br,https://www.diariosdoclima.org.br"
+      - "traefik.http.middlewares.cors-headers.headers.accessControlAllowOriginList=*"
       - "traefik.http.middlewares.cors-headers.headers.accessControlAllowHeaders=Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers"
       - "traefik.http.middlewares.cors-headers.headers.accessControlAllowCredentials=true"
       - "traefik.http.middlewares.cors-headers.headers.accessControlMaxAge=3600"
       - "traefik.http.middlewares.cors-headers.headers.accessControlExposeHeaders=Content-Length,Content-Range"
-
-      # Rate Limiting
-      - "traefik.http.middlewares.rate-limit.ratelimit.burst=100"
-      - "traefik.http.middlewares.rate-limit.ratelimit.average=50"
-      - "traefik.http.middlewares.rate-limit.ratelimit.period=1m"
 
       # Security Headers
       - "traefik.http.middlewares.security-headers.headers.frameDeny=true"
@@ -537,6 +543,11 @@ services:
       - "traefik.http.middlewares.security-headers.headers.stsSeconds=31536000"
       - "traefik.http.middlewares.security-headers.headers.stsIncludeSubdomains=true"
       - "traefik.http.middlewares.security-headers.headers.stsPreload=true"
+
+      # General rate limiting
+      - "traefik.http.middlewares.rate-limit.ratelimit.burst=100"
+      - "traefik.http.middlewares.rate-limit.ratelimit.average=50"
+      - "traefik.http.middlewares.rate-limit.ratelimit.period=1m"
 
       # API Rate Limiting (mais restritivo para APIs)
       - "traefik.http.middlewares.api-rate-limit.ratelimit.burst=50"
@@ -551,43 +562,55 @@ services:
       - "traefik.http.middlewares.api-redirect.redirectregex.replacement=https://api.$${1}/$${2}"
       - "traefik.http.middlewares.api-redirect.redirectregex.permanent=false"
 
-      # API Strip api path prefix - Strip '/api'from requests to api.domain.
+      # API Strip api path prefix - Strip '/api'from requests to api.domain
       - "traefik.http.middlewares.api-strip-prefix.stripprefix.prefixes=/api"
 
       # CORS for redirects - separate middleware that adds CORS to redirect responses
       - "traefik.http.middlewares.cors-redirect.headers.accessControlAllowMethods=GET,POST,OPTIONS,PUT,DELETE,PATCH"
-      - "traefik.http.middlewares.cors-redirect.headers.accessControlAllowOriginList=https://${DOMAIN},https://www.${DOMAIN},https://api.${DOMAIN},https://backend-api.${DOMAIN},https://backend.${DOMAIN},https://querido-diario-plataforma.netlify.app"
+      # - "traefik.http.middlewares.cors-redirect.headers.accessControlAllowOriginList=https://www.${DOMAIN},https://${DOMAIN},https://api.${DOMAIN},https://backend-api.${DOMAIN},https://backend.${DOMAIN},https://querido-diario-plataforma.netlify.app,https://diariosdoclima.org.br,https://backend-api.diariosdoclima.org.br,https://www.diariosdoclima.org.br"
+      - "traefik.http.middlewares.cors-redirect.headers.accessControlAllowOriginList=*"
       - "traefik.http.middlewares.cors-redirect.headers.accessControlAllowHeaders=Content-Type,Authorization,X-Requested-With,Accept,Origin,Access-Control-Request-Method,Access-Control-Request-Headers"
       - "traefik.http.middlewares.cors-redirect.headers.accessControlAllowCredentials=true"
       - "traefik.http.middlewares.cors-redirect.headers.accessControlMaxAge=3600"
       - "traefik.http.middlewares.cors-redirect.headers.accessControlExposeHeaders=Content-Length,Content-Range"
       - "traefik.http.middlewares.cors-redirect.headers.addVaryHeader=true"
 
+      - "traefik.http.middlewares.www-to-non-www.redirectregex.regex=^https://www\\.(.*)"
+      - "traefik.http.middlewares.www-to-non-www.redirectregex.replacement=https://$${1}"
+      - "traefik.http.middlewares.www-to-non-www.redirectregex.permanent=true"
+
       # Roteamento do frontend - Site principal para Netlify (substituindo configuração nginx)
       # Isso gerencia o roteamento do domínio principal que era feito anteriormente pelo nginx
-      - "traefik.http.routers.frontend-main.rule=Host(`${DOMAIN}`)"
-      - "traefik.http.routers.frontend-main.entrypoints=web,websecure"
-      - "traefik.http.routers.frontend-main.tls.certresolver=leresolver"
-      - "traefik.http.routers.frontend-main.middlewares=security-headers,compression"
-      - "traefik.http.routers.frontend-main.service=frontend-netlify"
-      - "traefik.http.routers.frontend-main.priority=1"
-      - "traefik.http.services.frontend-netlify.loadbalancer.server.url=https://querido-diario-plataforma.netlify.app"
+      - "traefik.http.routers.qd-frontend-main.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.qd-frontend-main.entrypoints=web,websecure"
+      - "traefik.http.routers.qd-frontend-main.tls.certresolver=leresolver"
+      - "traefik.http.routers.qd-frontend-main.middlewares=security-headers,compression"
+      - "traefik.http.routers.qd-frontend-main.service=qd-frontend-netlify"
+      - "traefik.http.routers.qd-frontend-main.priority=1"
+      - "traefik.http.services.qd-frontend-netlify.loadbalancer.server.url=https://querido-diario-plataforma.netlify.app"
 
       # Redirecionamento WWW para domínios principais
       # IMPORTANTE: Cloudflare Free/Pro não pode emitir certificados SSL para subdomínios de segundo nível
       # como www.queridodiario.ok.org.br. Por isso, www.* DEVE usar DNS-only (gray cloud) no Cloudflare
       # e o SSL deve ser gerenciado pelo Traefik via Let's Encrypt.
       # Isso se aplica a todos os subdomínios multi-nível (www.*, api.*, backend-api.*, etc.)
-      # IMPORTANTE: Exclui /.well-known/acme-challenge/ para permitir validação Let's Encrypt
-      - "traefik.http.routers.frontend-www-redirect.rule=Host(`www.${DOMAIN}`) && !PathPrefix(`/.well-known/acme-challenge/`)"
-      - "traefik.http.routers.frontend-www-redirect.entrypoints=web,websecure"
-      - "traefik.http.routers.frontend-www-redirect.tls.certresolver=leresolver"
-      - "traefik.http.routers.frontend-www-redirect.middlewares=www-to-non-www"
-      - "traefik.http.routers.frontend-www-redirect.priority=10"
+      # WWW Redirect Router - with proper ACME exclusion
+      - "traefik.http.routers.qd-frontend-www-redirect.rule=Host(`www.${DOMAIN}`)"
+      - "traefik.http.routers.qd-frontend-www-redirect.entrypoints=websecure"
+      - "traefik.http.routers.qd-frontend-www-redirect.tls.certresolver=leresolver"
+      - "traefik.http.routers.qd-frontend-www-redirect.middlewares=www-to-non-www"
+      - "traefik.http.routers.qd-frontend-www-redirect.service=qd-frontend-www-noop"
+      - "traefik.http.routers.qd-frontend-www-redirect.priority=10"
 
-      - "traefik.http.middlewares.www-to-non-www.redirectregex.regex=^https://www\\.(.*)"
-      - "traefik.http.middlewares.www-to-non-www.redirectregex.replacement=https://$${1}"
-      - "traefik.http.middlewares.www-to-non-www.redirectregex.permanent=true"
+      # WWW HTTP to HTTPS (for ACME challenges)
+      - "traefik.http.routers.qd-frontend-www-http.rule=Host(`www.${DOMAIN}`)"
+      - "traefik.http.routers.qd-frontend-www-http.entrypoints=web"
+      - "traefik.http.routers.qd-frontend-www-http.middlewares=redirect-to-https"
+      - "traefik.http.routers.qd-frontend-www-http.service=qd-frontend-www-noop"
+      - "traefik.http.routers.qd-frontend-www-http.priority=10"
+
+      # Define a noop service for www (required for redirect-only routers)
+      - "traefik.http.services.qd-frontend-www-noop.loadbalancer.server.url=http://127.0.0.1:9999"
 
     environment:
       # Configurações opcionais
