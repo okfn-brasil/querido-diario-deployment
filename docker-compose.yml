@@ -56,7 +56,7 @@ services:
 
   # Apache Tika Server for text extraction
   apache-tika:
-    image: ghcr.io/okfn-brasil/querido-diario-apache-tika-server:${APACHE_TIKA_IMAGE_TAG:-latest}
+    image: ghcr.io/okfn-brasil/querido-diario-data-processing/apache-tika:${APACHE_TIKA_IMAGE_TAG:-latest}
     container_name: querido-diario-tika
     restart: unless-stopped
     command: java -jar /tika-server.jar
