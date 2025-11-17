@@ -458,7 +458,7 @@ services:
   # Documentação completa: docs/traefik-setup.md
 
   traefik:
-    image: traefik:v3.5
+    image: traefik:latest
     container_name: traefik
     restart: unless-stopped
 
@@ -478,7 +478,7 @@ services:
 
       # SSL Certificates - Let's Encrypt
       - --certificatesresolvers.leresolver.acme.email=${ACME_EMAIL:-admin@queridodiario.ok.org.br}
-      - --certificatesresolvers.leresolver.acme.storage=/acme.json
+      - --certificatesresolvers.leresolver.acme.storage=/acme/acme.json
       - --certificatesresolvers.leresolver.acme.httpchallenge.entrypoint=web
 
       # Logging
@@ -493,7 +493,7 @@ services:
       # Socket Docker para descoberta automática
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Persistência dos certificados SSL
-      - traefik-acme:/acme.json
+      - traefik-acme:/acme
 
     networks:
       - frontend
@@ -505,12 +505,14 @@ services:
       # Router específico para ACME challenges (HTTP apenas, sem redirect)
       - "traefik.http.routers.acme-challenge.rule=PathPrefix(`/.well-known/acme-challenge/`)"
       - "traefik.http.routers.acme-challenge.entrypoints=web"
+      - "traefik.http.routers.acme-challenge.service=qd-frontend-www-noop"
       - "traefik.http.routers.acme-challenge.priority=999"
 
       # Redirecionamento HTTP -> HTTPS para todos os hosts (exceto ACME)
       - "traefik.http.routers.http-catchall.rule=PathPrefix(`/`) && !PathPrefix(`/.well-known/acme-challenge/`)"
       - "traefik.http.routers.http-catchall.entrypoints=web"
       - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+      - "traefik.http.routers.http-catchall.service=qd-frontend-www-noop"
       - "traefik.http.routers.http-catchall.priority=1"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
@@ -591,7 +593,7 @@ services:
       # como www.queridodiario.ok.org.br. Por isso, www.* DEVE usar DNS-only (gray cloud) no Cloudflare
       # e o SSL deve ser gerenciado pelo Traefik via Let's Encrypt.
       # Isso se aplica a todos os subdomínios multi-nível (www.*, api.*, backend-api.*, etc.)
-      
+
       # WWW Redirect Router (HTTPS) - redireciona www.domain para domain
       - "traefik.http.routers.qd-frontend-www-redirect.rule=Host(`www.${DOMAIN}`)"
       - "traefik.http.routers.qd-frontend-www-redirect.entrypoints=websecure"
@@ -606,4 +608,5 @@ services:
     environment:
       # Configurações opcionais
       - ACME_EMAIL=${ACME_EMAIL:-admin@queridodiario.ok.org.br}
+      - DOMAIN=${DOMAIN}
       - TRAEFIK_LOG_LEVEL=${TRAEFIK_LOG_LEVEL:-INFO}
