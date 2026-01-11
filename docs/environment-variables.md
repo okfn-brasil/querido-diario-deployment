@@ -1,6 +1,6 @@
 # Guia de Referência - Variáveis de Ambiente
 
-> 📅 **Última atualização**: Setembro 2025 (Pós-refatoração)
+> 📅 **Última atualização**: Janeiro 2025 (Adição de suporte a CloudFront/CDN)
 
 ## Visão Geral
 
@@ -115,11 +115,84 @@ Este documento serve como referência completa para todas as variáveis de ambie
 
 ### Endpoints de Arquivos
 
-| Variável | Descrição | Exemplo |
-|----------|-----------|---------|
-| `QUERIDO_DIARIO_FILES_ENDPOINT` | URL pública dos arquivos (gerada automaticamente no docker-compose a partir de STORAGE_ENDPOINT + STORAGE_BUCKET) | `https://storage.example.com/bucket/` |
+| Variável | Descrição | Exemplo | Usado em |
+|----------|-----------|---------|----------|
+| `QUERIDO_DIARIO_FILES_ENDPOINT` | URL pública para acesso aos arquivos (CloudFront/CDN) | `https://cdn.queridodiario.ok.org.br` | API |
+| `USE_RELATIVE_FILE_PATHS` | Armazenar paths relativos ao invés de URLs completas | `true` / `false` (default) | Data Processing |
+| `REPLACE_FILE_URL_BASE` | Substituir base URL de dados antigos | `true` / `false` (default) | API |
 
-**Nota:** A `QUERIDO_DIARIO_FILES_ENDPOINT` é construída automaticamente no docker-compose usando interpolação: `${STORAGE_ENDPOINT}/${STORAGE_BUCKET}/`. Não é necessário defini-la manualmente nos arquivos `.env`.
+#### 📝 Detalhes das Variáveis de Arquivo
+
+**`QUERIDO_DIARIO_FILES_ENDPOINT`** (API)
+- **Propósito:** Define a URL base pública para acessar arquivos TXT extraídos
+- **Desenvolvimento:** `http://localhost:9000/queridodiariobucket` (MinIO local)
+- **Produção:** `https://d1234567890.cloudfront.net` (CloudFront/CDN)
+- **Importante:** Esta variável agora é usada pela **API**, não pelo data-processing
+
+**`USE_RELATIVE_FILE_PATHS`** (Data Processing)
+- **Propósito:** Controla como os caminhos de arquivo são armazenados no OpenSearch
+- **Valores:**
+  - `false` (padrão): Armazena URLs completas (comportamento legado)
+  - `true`: Armazena apenas paths relativos (recomendado)
+- **Impacto:** 
+  - Com `false`: Armazena `https://domain.com/path/file.txt`
+  - Com `true`: Armazena `path/file.txt`
+- **Quando usar:** Habilite `true` em novas instalações ou ao migrar para CloudFront
+
+**`REPLACE_FILE_URL_BASE`** (API)
+- **Propósito:** Substitui automaticamente a base URL de dados antigos
+- **Valores:**
+  - `false` (padrão): Retorna URLs exatamente como estão no OpenSearch
+  - `true`: Extrai o path e reconstrói com o novo endpoint
+- **Quando usar:** 
+  - Durante migração de Digital Ocean para AWS
+  - Ao implementar CloudFront sobre storage existente
+  - Para migrar de um provider de storage para outro sem reprocessamento
+- **Exemplo:**
+  ```
+  OpenSearch: https://old-domain.com/path/file.txt
+  Com REPLACE=true e ENDPOINT=https://new-cdn.com
+  API retorna: https://new-cdn.com/path/file.txt
+  ```
+
+#### 🔄 Cenários de Migração
+
+**Cenário 1: Migração Imediata (Sem Reprocessamento)**
+```bash
+# API environment
+QUERIDO_DIARIO_FILES_ENDPOINT=https://d1234567890.cloudfront.net
+REPLACE_FILE_URL_BASE=true
+
+# Data Processing (sem mudanças)
+USE_RELATIVE_FILE_PATHS=false
+```
+
+**Cenário 2: Nova Instalação (Recomendado)**
+```bash
+# Data Processing
+USE_RELATIVE_FILE_PATHS=true
+
+# API
+QUERIDO_DIARIO_FILES_ENDPOINT=https://cdn.example.com
+REPLACE_FILE_URL_BASE=false
+```
+
+**Cenário 3: Migração Gradual**
+```bash
+# Fase 1: API
+QUERIDO_DIARIO_FILES_ENDPOINT=https://cdn.example.com
+REPLACE_FILE_URL_BASE=true
+
+# Fase 2: Data Processing (após validação)
+USE_RELATIVE_FILE_PATHS=true
+```
+
+#### 📚 Documentação Adicional
+
+Para mais detalhes sobre a migração de storage e uso de CloudFront:
+- Ver: `FILE_URL_MIGRATION_GUIDE.md`
+- Ver: `IMPLEMENTATION_SUMMARY.md`
+- Ver: `REFACTORING_PLAN_FILE_PATHS.md`
 
 ## 📨 Configuração Redis/Celery
 
