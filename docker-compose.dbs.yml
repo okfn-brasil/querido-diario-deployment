@@ -1,0 +1,53 @@
+---
+# Compose para containers de banco de dados
+# Usado quando os bancos rodam como containers Docker (não em servidor dedicado)
+#
+# Uso:
+#   docker compose -f docker-compose.dbs.yml up -d
+#
+# Em produção, os bancos tipicamente ficam em host separado dos serviços principais.
+
+services:
+  postgres-qd:
+    image: postgres:12.22
+    container_name: postgres_queridodiario
+    restart: always
+    environment:
+      POSTGRES_DB: ${QD_DATA_DB_NAME:-queridodiariodb}
+      POSTGRES_USER: ${QD_DATA_DB_USER}
+      POSTGRES_PASSWORD: ${QD_DATA_DB_PASSWORD}
+    # ports:
+    #   - "5434:5432"
+    volumes:
+      - postgres_queridodiario_data:/var/lib/postgresql/data
+
+  postgres-qd-backend:
+    image: postgres:12.22
+    container_name: postgres_queridodiariobackend
+    restart: always
+    environment:
+      POSTGRES_DB: ${QD_BACKEND_DB_NAME:-queridodiariobackend}
+      POSTGRES_USER: ${QD_BACKEND_DB_USER}
+      POSTGRES_PASSWORD: ${QD_BACKEND_DB_PASSWORD}
+    # ports:
+    #   - "5436:5432"
+    volumes:
+      - postgres_queridodiariobackend_data:/var/lib/postgresql/data
+
+  postgres-receita:
+    image: postgres:12.22
+    container_name: postgres_receita
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_COMPANIES_DB:-qd_receita}
+      POSTGRES_USER: ${POSTGRES_COMPANIES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_COMPANIES_PASSWORD}
+    ports:
+      - "${POSTGRES_COMPANIES_EXPOSED_PORT:-5437}:5432"
+    volumes:
+      - postgres_receita_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_queridodiario_data:
+  postgres_queridodiariobackend_data:
+  postgres_receita_data:

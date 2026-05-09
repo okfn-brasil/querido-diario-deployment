@@ -1,249 +1,124 @@
 # Querido Diário Deployment Makefile
 # ===================================
 
-.PHONY: help dev dev-build prod prod-build clean validate setup-env-dev setup-env-prod
+.PHONY: help network \
+        deploy-traefik deploy-services deploy-dbs deploy-all \
+        dev dev-down \
+        down-traefik down-services down-dbs \
+        validate logs ps status restart update \
+        run-data-processing \
+        shell-api shell-backend \
+        check-env
 
-# Target padrão
+ENV_FILE ?= .env
+
+COMPOSE_TRAEFIK  = docker compose -f docker-compose.traefik.yml  --env-file $(ENV_FILE)
+COMPOSE_SERVICES = docker compose -f docker-compose.yml           --env-file $(ENV_FILE)
+COMPOSE_DBS      = docker compose -f docker-compose.dbs.yml       --env-file $(ENV_FILE)
+COMPOSE_DEV      = docker compose \
+                     -f docker-compose.yml \
+                     -f docker-compose.traefik.yml \
+                     -f docker-compose.dev.yml \
+                     --env-file $(ENV_FILE)
+
 help: ## Mostra esta mensagem de ajuda
-	@echo "📋 Comandos disponíveis:"
+	@echo "Comandos disponíveis:"
 	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2}'
 	@echo ""
-	@echo "🚀 Início rápido:"
-	@echo "  Desenvolvimento: make dev"
-	@echo "  Produção:       make prod"
+	@echo "Inicio rapido:"
+	@echo "  Desenvolvimento : make dev"
+	@echo "  Producao        : make deploy-all"
 	@echo ""
-	@echo "📋 Configuração:"
-	@echo "  make setup-env-dev    # Gera .env para desenvolvimento"
-	@echo "  make setup-env-prod   # Gera .env para produção"
-	@echo ""
-	@echo "🧹 Limpeza:"
-	@echo "  make clean           # Para containers e remove volumes"
-	@echo "  make clean-all       # Limpa containers, volumes e arquivos gerados"
-	@echo ""
+	@echo "Variaveis:"
+	@echo "  ENV_FILE=<path>  (padrao: .env)"
 
-setup-env-dev: ## Gera arquivo .env para desenvolvimento local (domínio padrão)
-	@echo "⚙️ Gerando arquivo .env para desenvolvimento..."
-	@echo "🏠 Usando configuração padrão para desenvolvimento local"
-	@cp templates/env.prod.sample .env
-	@echo "DOMAIN=queridodiario.local" > .env.temp
-	@echo "QD_BACKEND_SECRET_KEY=dev-secret-key-not-for-production" >> .env.temp
-	@echo "QD_BACKEND_DEBUG=True" >> .env.temp
-	@echo "DEBUG=1" >> .env.temp
-	@grep -v "^DOMAIN=" templates/env.prod.sample | grep -v "^QD_BACKEND_SECRET_KEY=" | grep -v "^QD_BACKEND_DEBUG=" | grep -v "^DEBUG=" >> .env.temp
-	@mv .env.temp .env
-	@echo "✅ Arquivo .env criado para desenvolvimento!"
-	@echo "💡 Use 'make dev' para iniciar os serviços."
+# --- Infraestrutura ---
 
-setup-env-prod: ## Gera arquivo .env para produção (requer edição manual)
-	@echo "⚙️ Gerando arquivo .env para produção..."
-	@cp templates/env.prod.sample .env
-	@echo "✅ Arquivo .env criado a partir de env.prod.sample"
-	@echo ""
-	@echo "⚠️  IMPORTANTE - Configure as seguintes variáveis obrigatórias em .env:"
-	@echo "   • DOMAIN                  (seu domínio de produção)"
-	@echo "   • QD_BACKEND_SECRET_KEY   (chave secreta do Django)"
-	@echo "   • Strings de conexão dos bancos de dados externos"
-	@echo "   • Configurações do OpenSearch externo"
-	@echo "   • Configurações de storage (S3 ou similar)"
-	@echo "   • Credenciais do serviço de email"
-	@echo ""
-	@echo "💡 Após configurar, use 'make prod' para fazer o deploy."
+network: ## Cria a rede Docker 'frontend' (necessaria antes do primeiro deploy)
+	docker network create frontend 2>/dev/null || true
 
-dev: setup-env-dev ## Inicia ambiente de desenvolvimento com todos os serviços
-	@echo "🚀 Iniciando ambiente de desenvolvimento..."
-	@echo "🌐 Criando rede frontend se não existir..."
-	@docker network create frontend 2>/dev/null || true
-	@echo "📦 Iniciando serviços de desenvolvimento..."
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile dev up -d
-	@echo ""
-	@echo "✅ Serviços de desenvolvimento iniciados!"
-	@echo ""
-	@echo "📍 URLs disponíveis:"
-	@echo "   • API: http://localhost:8080 ou http://api.queridodiario.local"
-	@echo "   • Backend: http://localhost:8000 ou http://backend-api.queridodiario.local"
-	@echo "   • OpenSearch: http://localhost:9200"
-	@echo "   • MinIO: http://localhost:9000"
-	@echo "   • Redis: localhost:6378"
-	@echo ""
-	@echo "💡 Para parar: make clean"
+# --- Producao ---
 
-dev-build: setup-env-dev ## Reconstrói e inicia ambiente de desenvolvimento
-	@echo "🏗️ Reconstruindo e iniciando ambiente de desenvolvimento..."
-	@echo "🌐 Criando rede frontend se não existir..."
-	@docker network create frontend 2>/dev/null || true
-	@echo "📦 Reconstruindo e iniciando serviços..."
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile dev up -d --build
-	@echo "✅ Serviços de desenvolvimento reconstruídos e iniciados!"
+deploy-traefik: network ## Sobe o Traefik (reverse proxy + SSL)
+	$(COMPOSE_TRAEFIK) up -d
 
-prod: ## Inicia ambiente de produção
-	@echo "🚀 Iniciando ambiente de produção..."
-	@if [ ! -f .env ]; then \
-		echo "❌ Erro: arquivo .env não encontrado!"; \
-		echo "💡 Execute 'make setup-env-prod' e configure-o primeiro."; \
-		exit 1; \
-	fi
-	@echo "🌐 Criando rede frontend se não existir..."
-	@docker network create frontend 2>/dev/null || true
-	@echo "📦 Iniciando serviços de produção..."
-	docker compose -f docker-compose.yml up -d
-	@echo ""
-	@echo "✅ Serviços de produção iniciados!"
-	@echo ""
-	@echo "📍 URLs configuradas (verifique seu DNS):"
-	@echo "   • Frontend: https://$$(grep '^DOMAIN=' .env | cut -d'=' -f2)"
-	@echo "   • API: https://api.$$(grep '^DOMAIN=' .env | cut -d'=' -f2)"
-	@echo "   • Backend: https://backend-api.$$(grep '^DOMAIN=' .env | cut -d'=' -f2)"
-	@echo ""
-	@echo "💡 Para parar: make clean"
+deploy-services: network ## Sobe os servicos da aplicacao (API, backend, celery, tika, redis)
+	$(COMPOSE_SERVICES) up -d
 
-prod-build: ## Reconstrói e inicia ambiente de produção
-	@echo "🏗️ Reconstruindo e iniciando ambiente de produção..."
-	@if [ ! -f .env ]; then \
-		echo "❌ Erro: arquivo .env não encontrado!"; \
-		echo "💡 Execute 'make setup-env-prod' e configure-o primeiro."; \
-		exit 1; \
-	fi
-	@echo "🌐 Criando rede frontend se não existir..."
-	@docker network create frontend 2>/dev/null || true
-	@echo "📦 Reconstruindo e iniciando serviços..."
-	docker compose -f docker-compose.yml up -d --build
-	@echo "✅ Serviços de produção reconstruídos e iniciados!"
+deploy-dbs: ## Sobe os containers de banco de dados (somente quando DBs sao containers)
+	$(COMPOSE_DBS) up -d
 
-validate: ## Valida sintaxe dos arquivos docker-compose
-	@echo "🔍 Validando arquivos docker-compose..."
-	@echo "Verificando docker-compose de desenvolvimento..."
-	@docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile dev config > /dev/null && echo "✅ docker-compose de desenvolvimento está válido"
-	@echo "Verificando docker-compose de produção..."
-	@docker compose -f docker-compose.yml config > /dev/null && echo "✅ docker-compose de produção está válido"
+deploy-all: deploy-traefik deploy-services ## Sobe traefik + servicos (deploy completo)
 
-clean: ## Para e remove todos os containers, redes e volumes
-	@echo "🧹 Limpando containers e volumes..."
-	@if docker compose ps --services &>/dev/null; then \
-		docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v --remove-orphans 2>/dev/null || true; \
-		docker compose -f docker-compose.yml down -v --remove-orphans 2>/dev/null || true; \
-	fi
-	@echo "✅ Limpeza de containers concluída!"
+# --- Desenvolvimento ---
 
-clean-env: ## Remove arquivos de ambiente gerados
-	@echo "🧹 Limpando arquivos de ambiente..."
-	@if [ -f .env ]; then \
-		rm .env && echo "Removido .env"; \
-	fi
-	@echo "✅ Arquivos de ambiente limpos!"
+dev: network ## Sobe ambiente de desenvolvimento (traefik HTTP + servicos + infra local)
+	$(COMPOSE_DEV) up -d
 
-clean-all: clean clean-env ## Remove containers, volumes e arquivos gerados
-	@echo "✅ Limpeza completa concluída!"
+dev-down: ## Para e remove o ambiente de desenvolvimento
+	$(COMPOSE_DEV) down
 
-logs: ## Mostra logs de todos os serviços
-	@if docker compose ps --services &>/dev/null; then \
-		docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f; \
-	else \
-		docker compose -f docker-compose.yml logs -f; \
-	fi
+# --- Parar servicos ---
 
-logs-api: ## Mostra logs do serviço API
-	@if docker compose ps --services &>/dev/null; then \
-		docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f querido-diario-api; \
-	else \
-		docker compose -f docker-compose.yml logs -f querido-diario-api; \
-	fi
+down-traefik: ## Para o Traefik
+	$(COMPOSE_TRAEFIK) down
 
-logs-backend: ## Mostra logs do serviço Backend
-	@if docker compose ps --services &>/dev/null; then \
-		docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f querido-diario-backend; \
-	else \
-		docker compose -f docker-compose.yml logs -f querido-diario-backend; \
-	fi
+down-services: ## Para os servicos da aplicacao
+	$(COMPOSE_SERVICES) down
 
-logs-traefik: ## Mostra logs do Traefik
-	@if docker compose ps --services &>/dev/null; then \
-		docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f traefik; \
-	else \
-		docker compose -f docker-compose.yml logs -f traefik; \
-	fi
+down-dbs: ## Para os containers de banco de dados
+	$(COMPOSE_DBS) down
 
-status: ## Mostra status de todos os serviços
-	@echo "📊 Status dos Serviços:"
-	@if docker compose ps --services &>/dev/null; then \
-		docker compose -f docker-compose.yml -f docker-compose.dev.yml ps; \
-	else \
-		docker compose -f docker-compose.yml ps; \
-	fi
+# --- Validacao ---
 
-restart: ## Reinicia todos os serviços
-	@echo "🔄 Reiniciando serviços..."
-	@if docker compose ps --services &>/dev/null; then \
-		docker compose -f docker-compose.yml -f docker-compose.dev.yml restart; \
-	else \
-		docker compose -f docker-compose.yml restart; \
-	fi
-	@echo "✅ Serviços reiniciados!"
+validate: ## Valida sintaxe de todos os arquivos docker-compose
+	@echo "Validando docker-compose.yml..."
+	@$(COMPOSE_SERVICES) config > /dev/null && echo "  OK: docker-compose.yml"
+	@echo "Validando docker-compose.traefik.yml..."
+	@$(COMPOSE_TRAEFIK) config > /dev/null && echo "  OK: docker-compose.traefik.yml"
+	@echo "Validando docker-compose.dbs.yml..."
+	@$(COMPOSE_DBS) config > /dev/null && echo "  OK: docker-compose.dbs.yml"
+	@echo "Validando docker-compose.dev.yml..."
+	@$(COMPOSE_DEV) config > /dev/null && echo "  OK: docker-compose.dev.yml"
 
-update: ## Atualiza todas as imagens de serviços
-	@echo "📦 Atualizando imagens de serviços..."
-	@if docker compose ps --services &>/dev/null; then \
-		docker compose -f docker-compose.yml -f docker-compose.dev.yml pull; \
-	else \
-		docker compose -f docker-compose.yml pull; \
-	fi
-	@echo "✅ Imagens atualizadas! Execute 'make restart' para aplicar."
+check-env: ## Verifica variaveis obrigatorias no .env
+	@echo "Verificando $(ENV_FILE)..."
+	@for var in DOMAIN QD_BACKEND_SECRET_KEY ACME_EMAIL \
+	            QD_DATA_DB_HOST QD_BACKEND_DB_HOST \
+	            QUERIDO_DIARIO_OPENSEARCH_HOST \
+	            STORAGE_ACCESS_KEY STORAGE_ACCESS_SECRET STORAGE_BUCKET; do \
+		val=$$(grep "^$${var}=" $(ENV_FILE) 2>/dev/null | cut -d'=' -f2-); \
+		if [ -z "$$val" ]; then \
+			echo "  FALTANDO: $$var"; \
+		else \
+			echo "  OK: $$var"; \
+		fi; \
+	done
 
-# Utilitários de desenvolvimento
-db-reset: ## Reseta banco de dados (apenas desenvolvimento)
-	@echo "🗃️ Resetando banco de dados de desenvolvimento..."
-	@if docker compose ps --services &>/dev/null; then \
-		docker compose -f docker-compose.yml -f docker-compose.dev.yml exec querido-diario-backend python manage.py migrate; \
-	else \
-		echo "❌ Execute 'make dev' primeiro para iniciar o ambiente de desenvolvimento"; \
-	fi
-	@echo "✅ Reset do banco de dados concluído!"
+# --- Utilitarios ---
+
+logs: ## Exibe logs dos servicos (use SERVICE=nome para filtrar)
+	$(COMPOSE_SERVICES) logs -f $(SERVICE)
+
+ps: ## Lista containers em execucao
+	$(COMPOSE_SERVICES) ps
+
+status: ## Mostra status detalhado dos servicos
+	$(COMPOSE_SERVICES) ps --format "table {{.Service}}\t{{.Status}}\t{{.Ports}}"
+
+restart: ## Reinicia todos os servicos
+	$(COMPOSE_SERVICES) restart $(SERVICE)
+
+update: ## Atualiza imagens e reinicia servicos
+	$(COMPOSE_SERVICES) pull
+	$(COMPOSE_SERVICES) up -d
+
+run-data-processing: ## Executa o data-processing manualmente (uso pontual)
+	$(COMPOSE_SERVICES) run --rm data-processing
 
 shell-api: ## Abre shell no container da API
-	@if docker compose ps --services &>/dev/null; then \
-		docker compose -f docker-compose.yml -f docker-compose.dev.yml exec querido-diario-api /bin/bash; \
-	else \
-		docker compose -f docker-compose.yml exec querido-diario-api /bin/bash; \
-	fi
+	$(COMPOSE_SERVICES) exec api /bin/bash
 
 shell-backend: ## Abre shell no container do Backend
-	@if docker compose ps --services &>/dev/null; then \
-		docker compose -f docker-compose.yml -f docker-compose.dev.yml exec querido-diario-backend /bin/bash; \
-	else \
-		docker compose -f docker-compose.yml exec querido-diario-backend /bin/bash; \
-	fi
-
-health: ## Verifica saúde de todos os serviços
-	@echo "🏥 Verificação de Saúde:"
-	@if docker compose ps --services &>/dev/null; then \
-		docker compose -f docker-compose.yml -f docker-compose.dev.yml ps --format "table {{.Service}}\t{{.Status}}\t{{.Ports}}"; \
-	else \
-		docker compose -f docker-compose.yml ps --format "table {{.Service}}\t{{.Status}}\t{{.Ports}}"; \
-	fi
-
-check-env: ## Verifica se as variáveis de ambiente obrigatórias estão definidas
-	@echo "🔍 Verificando variáveis de ambiente..."
-	@if [ -f .env ]; then \
-		if grep -q "^DOMAIN=" .env; then \
-			echo "✅ Variável DOMAIN definida: $$(grep '^DOMAIN=' .env | cut -d'=' -f2)"; \
-		else \
-			echo "❌ Variável DOMAIN não encontrada no .env"; \
-		fi; \
-		if grep -q "^QD_BACKEND_SECRET_KEY=" .env; then \
-			echo "✅ Variável QD_BACKEND_SECRET_KEY definida"; \
-		else \
-			echo "❌ Variável QD_BACKEND_SECRET_KEY não encontrada no .env"; \
-		fi; \
-	else \
-		echo "❌ Arquivo .env não encontrado. Execute 'make setup-env-dev' ou 'make setup-env-prod' primeiro."; \
-	fi
-
-network-create: ## Cria rede frontend para o Traefik
-	@echo "🌐 Criando rede frontend..."
-	@docker network create frontend 2>/dev/null || echo "ℹ️ Rede frontend já existe"
-	@echo "✅ Rede frontend pronta!"
-
-network-remove: ## Remove rede frontend
-	@echo "🗑️ Removendo rede frontend..."
-	@docker network rm frontend 2>/dev/null || echo "ℹ️ Rede frontend não existe"
-	@echo "✅ Rede frontend removida!"
+	$(COMPOSE_SERVICES) exec backend /bin/bash
