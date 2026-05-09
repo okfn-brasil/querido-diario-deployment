@@ -1,0 +1,91 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Em dev, sempre use :latest para pegar as imagens mais recentes
+images:
+  - name: ghcr.io/okfn-brasil/querido-diario-api
+    newTag: latest
+  - name: ghcr.io/okfn-brasil/querido-diario-backend
+    newTag: latest
+  - name: ghcr.io/okfn-brasil/querido-diario-data-processing
+    newTag: latest
+  - name: ghcr.io/okfn-brasil/querido-diario-data-processing/apache-tika
+    newTag: latest
+
+# Patches para dev: menos recursos, 1 réplica de tudo
+patches:
+  # API: limites menores
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 512Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 256Mi
+    target:
+      kind: Deployment
+      name: api
+
+  # Backend: limites menores
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 512Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 256Mi
+    target:
+      kind: Deployment
+      name: backend
+
+  # Tika: limites menores
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 1500Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 512Mi
+    target:
+      kind: Deployment
+      name: apache-tika
+
+  # Data processing: CronJob suspenso em dev (execute manualmente)
+  - patch: |-
+      - op: replace
+        path: /spec/suspend
+        value: true
+    target:
+      kind: CronJob
+      name: data-processing
+
+  # ConfigMap: sobrescreve domínio e endpoints para dev local
+  - patch: |-
+      - op: replace
+        path: /data/DOMAIN
+        value: queridodiario.local
+      - op: replace
+        path: /data/QD_API_URL
+        value: http://api.queridodiario.local
+      - op: replace
+        path: /data/QD_BACKEND_DEBUG
+        value: "True"
+      - op: replace
+        path: /data/STATIC_URL
+        value: http://backend-api.queridodiario.local/api/static/
+      - op: replace
+        path: /data/FRONT_BASE_URL
+        value: http://localhost:4200
+      - op: replace
+        path: /data/CELERY_BROKER_URL
+        value: redis://redis:6378
+      - op: replace
+        path: /data/CELERY_RESULT_BACKEND
+        value: redis://redis:6378
+    target:
+      kind: ConfigMap
+      name: app-config

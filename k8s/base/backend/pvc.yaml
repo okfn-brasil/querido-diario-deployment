@@ -1,0 +1,15 @@
+---
+# ReadWriteOnce funciona para 1 réplica de backend.
+# Para múltiplas réplicas, migre para ReadWriteMany (NFS/EFS) ou sirva
+# arquivos estáticos via S3/CDN.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: static-files
+  namespace: querido-diario
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi

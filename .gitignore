@@ -18,3 +18,8 @@ prod-compose-dbs.yml
 prod-compose-services.yml
 prod-compose-services-env-vars
 prod-traefik-services.yml
+
+# Secrets K8s com valores reais (nunca versionar)
+k8s/overlays/*/secret-app.env
+k8s/overlays/*/*.secret.yaml
+k8s/base/secret-app-values.yaml

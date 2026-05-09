@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apache-tika
+  namespace: querido-diario
+spec:
+  selector:
+    app: apache-tika
+  ports:
+    - port: 9998
+      targetPort: 9998

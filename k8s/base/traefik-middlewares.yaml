@@ -1,0 +1,139 @@
+---
+# Middlewares Traefik equivalentes às labels do docker-compose.traefik.yml
+# Requer Traefik v3 com CRDs instalados no cluster.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-to-https
+  namespace: querido-diario
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: cors-headers
+  namespace: querido-diario
+spec:
+  headers:
+    accessControlAllowMethods:
+      - GET
+      - POST
+      - OPTIONS
+      - PUT
+      - DELETE
+      - PATCH
+    accessControlAllowOriginList:
+      - "*"
+    accessControlAllowHeaders:
+      - Content-Type
+      - Authorization
+      - X-Requested-With
+      - Accept
+      - Origin
+      - Access-Control-Request-Method
+      - Access-Control-Request-Headers
+    accessControlAllowCredentials: true
+    accessControlMaxAge: 3600
+    accessControlExposeHeaders:
+      - Content-Length
+      - Content-Range
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: cors-redirect
+  namespace: querido-diario
+spec:
+  headers:
+    accessControlAllowMethods:
+      - GET
+      - POST
+      - OPTIONS
+      - PUT
+      - DELETE
+      - PATCH
+    accessControlAllowOriginList:
+      - "*"
+    accessControlAllowHeaders:
+      - Content-Type
+      - Authorization
+      - X-Requested-With
+      - Accept
+      - Origin
+      - Access-Control-Request-Method
+      - Access-Control-Request-Headers
+    accessControlAllowCredentials: true
+    accessControlMaxAge: 3600
+    accessControlExposeHeaders:
+      - Content-Length
+      - Content-Range
+    addVaryHeader: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: security-headers
+  namespace: querido-diario
+spec:
+  headers:
+    frameDeny: true
+    contentTypeNosniff: true
+    browserXssFilter: true
+    referrerPolicy: strict-origin-when-cross-origin
+    stsSeconds: 31536000
+    stsIncludeSubdomains: true
+    stsPreload: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: api-rate-limit
+  namespace: querido-diario
+spec:
+  rateLimit:
+    burst: 50
+    average: 25
+    period: 1m
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: compression
+  namespace: querido-diario
+spec:
+  compress: {}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: api-strip-prefix
+  namespace: querido-diario
+spec:
+  stripPrefix:
+    prefixes:
+      - /api
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: api-redirect
+  namespace: querido-diario
+spec:
+  redirectRegex:
+    regex: "^https?://([^/]+)/api/(.*)"
+    replacement: "https://api.${1}/${2}"
+    permanent: false
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: www-to-non-www
+  namespace: querido-diario
+spec:
+  redirectRegex:
+    regex: "^https?://www\\.(.*)"
+    replacement: "https://${1}"
+    permanent: true

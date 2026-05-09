@@ -1,0 +1,41 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Defina as imagens com tags fixas para produção (evite :latest)
+images:
+  - name: ghcr.io/okfn-brasil/querido-diario-api
+    newTag: "latest"  # substitua pela tag de release, ex: "v1.2.3"
+  - name: ghcr.io/okfn-brasil/querido-diario-backend
+    newTag: "latest"
+  - name: ghcr.io/okfn-brasil/querido-diario-data-processing
+    newTag: "latest"
+  - name: ghcr.io/okfn-brasil/querido-diario-data-processing/apache-tika
+    newTag: "latest"
+
+# Patches de configuração específica de produção
+patches:
+  # API: mais réplicas em produção
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+    target:
+      kind: Deployment
+      name: api
+
+  # Celery Worker: mais réplicas
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+    target:
+      kind: Deployment
+      name: celery-worker
+
+# O arquivo secret-app.env NÃO deve ser versionado com valores reais.
+# Crie-o localmente com: kubectl create secret generic app-secret ...
+# Ou use External Secrets Operator / Sealed Secrets.

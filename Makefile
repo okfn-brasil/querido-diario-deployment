@@ -8,7 +8,9 @@
         validate logs ps status restart update \
         run-data-processing \
         shell-api shell-backend \
-        check-env
+        check-env \
+        k8s-build-base k8s-build-prod k8s-build-dev \
+        k8s-apply-prod k8s-apply-dev k8s-diff-prod k8s-diff-dev
 
 ENV_FILE ?= .env
 
@@ -122,3 +124,26 @@ shell-api: ## Abre shell no container da API
 
 shell-backend: ## Abre shell no container do Backend
 	$(COMPOSE_SERVICES) exec backend /bin/bash
+
+# --- Kubernetes (kustomize) ---
+
+k8s-build-base: ## Gera YAML da base k8s (dry-run, sem aplicar)
+	kubectl kustomize k8s/base
+
+k8s-build-prod: ## Gera YAML do overlay de produção (dry-run, sem aplicar)
+	kubectl kustomize k8s/overlays/production
+
+k8s-build-dev: ## Gera YAML do overlay de desenvolvimento (dry-run, sem aplicar)
+	kubectl kustomize k8s/overlays/dev
+
+k8s-apply-prod: ## Aplica manifestos de produção no cluster atual
+	kubectl apply -k k8s/overlays/production
+
+k8s-apply-dev: ## Aplica manifestos de dev no cluster atual
+	kubectl apply -k k8s/overlays/dev
+
+k8s-diff-prod: ## Mostra diff entre estado atual do cluster e overlay de produção
+	kubectl diff -k k8s/overlays/production
+
+k8s-diff-dev: ## Mostra diff entre estado atual do cluster e overlay de dev
+	kubectl diff -k k8s/overlays/dev
