@@ -41,8 +41,8 @@ spec:
           env:
             - name: discovery.type
               value: single-node
-            - name: plugins.security.ssl.http.enabled
-              value: "false"
+            - name: plugins.security.disabled
+              value: "true"
             - name: OPENSEARCH_JAVA_OPTS
               value: "-Xms512m -Xmx512m"
           resources:
