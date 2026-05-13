@@ -1,0 +1,37 @@
+---
+# Traefik para ambiente local kind
+# DaemonSet com hostPort para que o pod use a porta 80 do nó kind,
+# que é mapeada para localhost:80 via extraPortMappings do cluster.
+
+deployment:
+  kind: DaemonSet
+
+ports:
+  web:
+    port: 8000          # porta interna do container Traefik
+    hostPort: 80        # mapeia para a porta 80 do nó kind
+    expose:
+      default: true
+    exposedPort: 80
+  websecure:
+    port: 8443
+    expose:
+      default: false    # não expõe HTTPS em dev
+
+service:
+  type: ClusterIP
+
+providers:
+  kubernetesCRD:
+    enabled: true
+  kubernetesIngress:
+    enabled: false
+
+logs:
+  general:
+    level: DEBUG
+  access:
+    enabled: true
+
+# Sem ACME em dev
+certificatesResolvers: {}
