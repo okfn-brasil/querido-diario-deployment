@@ -8,7 +8,8 @@ resources:
   - infra/configmap-postgres-init.yaml
   - infra/postgres.yaml
   - infra/opensearch.yaml
-  - infra/minio.yaml
+  - infra/garage.yaml
+  - infra/garage-webui.yaml
   - infra/init-jobs.yaml
   # IngressRoutes HTTP para *.queridodiario.local
   - ingressroutes-dev.yaml
@@ -58,10 +59,10 @@ patches:
         value: redis://redis:6378
       - op: replace
         path: /data/STORAGE_ENDPOINT
-        value: http://minio:9000
+        value: http://garage:3900
       - op: replace
         path: /data/QUERIDO_DIARIO_FILES_ENDPOINT
-        value: http://minio:9000/queridodiariobucket/
+        value: http://garage:3900/queridodiariobucket
     target:
       kind: ConfigMap
       name: app-config

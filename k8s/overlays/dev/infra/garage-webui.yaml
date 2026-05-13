@@ -1,0 +1,46 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: garage-webui
+  namespace: querido-diario
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: garage-webui
+  template:
+    metadata:
+      labels:
+        app: garage-webui
+    spec:
+      containers:
+        - name: garage-webui
+          image: khairul169/garage-webui:latest
+          ports:
+            - containerPort: 3909
+          resources:
+            limits:
+              memory: 64Mi
+            requests:
+              memory: 16Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/garage.toml
+              subPath: garage.toml
+      volumes:
+        - name: config
+          configMap:
+            name: garage-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: garage-webui
+  namespace: querido-diario
+spec:
+  selector:
+    app: garage-webui
+  ports:
+    - port: 3909
+      targetPort: 3909

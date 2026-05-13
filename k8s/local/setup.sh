@@ -199,8 +199,8 @@ _preload_image() (
 DEV_INFRA_IMAGES=(
     "postgres:13"
     "opensearchproject/opensearch:2.9.0"
-    "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z"
-    "quay.io/minio/mc:RELEASE.2025-03-12T17-29-24Z"
+    "dxflrs/garage:v2.3.0"
+    "khairul169/garage-webui:latest"
     "curlimages/curl:latest"
     "busybox"
 )
@@ -217,9 +217,9 @@ kubectl apply -k "$K8S_DIR/overlays/dev"
 
 # ─── 8. Aguarda infra ficar pronta ───────────────────────────────────────────
 
-log "Aguardando infra (postgres, opensearch, minio)..."
+log "Aguardando infra (postgres, opensearch, garage)..."
 kubectl rollout status deployment/postgres   -n "$NAMESPACE" --timeout=120s
-kubectl rollout status deployment/minio      -n "$NAMESPACE" --timeout=120s
+kubectl rollout status deployment/garage     -n "$NAMESPACE" --timeout=120s
 # OpenSearch inicializa JVM + índices, pode demorar >2min mesmo com imagem local
 kubectl rollout status deployment/opensearch -n "$NAMESPACE" --timeout=300s
 
@@ -227,10 +227,9 @@ log "Aguardando serviços de aplicação..."
 kubectl rollout status deployment/redis        -n "$NAMESPACE" --timeout=120s
 kubectl rollout status deployment/apache-tika  -n "$NAMESPACE" --timeout=300s
 
-log "Aguardando jobs de inicialização..."
-kubectl wait job/minio-createbucket   -n "$NAMESPACE" --for=condition=complete --timeout=60s 2>/dev/null || \
-    warn "Job minio-createbucket não concluiu em 60s (pode já ter rodado antes)"
-kubectl wait job/opensearch-init      -n "$NAMESPACE" --for=condition=complete --timeout=60s 2>/dev/null || \
+log "Aguardando job de inicialização do OpenSearch..."
+# Garage não precisa de job: bucket e key são criados via --single-node --default-bucket
+kubectl wait job/opensearch-init -n "$NAMESPACE" --for=condition=complete --timeout=60s 2>/dev/null || \
     warn "Job opensearch-init não concluiu em 60s (pode já ter rodado antes)"
 
 # ─── 8. /etc/hosts ───────────────────────────────────────────────────────────
@@ -266,8 +265,8 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 echo "  API:      http://api.queridodiario.local"
 echo "  Backend:  http://backend-api.queridodiario.local"
-echo "  MinIO UI: kubectl port-forward svc/minio 9001:9001 -n querido-diario"
-echo "             → http://localhost:9001  (user: minio-access-key)"
+echo "  Garage UI: make k8s-local-garage-ui"
+echo "              → http://localhost:3909"
 echo ""
 echo "  Outros comandos úteis:"
 echo "    make k8s-local-hosts   # adiciona /etc/hosts (sudo)"
