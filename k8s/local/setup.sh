@@ -140,8 +140,21 @@ _preload_traefik_image() (
     else
         full_image="${repo}:${tag}"
     fi
-    log "Pré-carregando ${full_image} no nó kind..."
-    docker pull "$full_image" 2>&1 || return 0
+    local node="${CLUSTER_NAME}-control-plane"
+
+    if ! docker image inspect "$full_image" >/dev/null 2>&1; then
+        log "Baixando ${full_image}..."
+        docker pull "$full_image" 2>&1 || return 0
+    fi
+
+    local img_id
+    img_id=$(docker image inspect "$full_image" --format '{{.Id}}' 2>/dev/null | cut -d: -f2 | head -c12)
+    if [ -n "$img_id" ] && docker exec "$node" crictl images 2>/dev/null | grep -q "$img_id"; then
+        info "${full_image} já presente no nó kind."
+        return 0
+    fi
+
+    log "Carregando ${full_image} no nó kind..."
     kind load docker-image "$full_image" --name "$CLUSTER_NAME" 2>&1 || return 0
 )
 _preload_traefik_image || true
@@ -163,8 +176,23 @@ info "Traefik pronto."
 _preload_image() (
     set +e
     local image="$1"
-    log "Pré-carregando ${image}..."
-    docker pull "$image" 2>&1 || { warn "Pull de ${image} falhou, continuando."; return 0; }
+    local node="${CLUSTER_NAME}-control-plane"
+
+    # Só faz pull se a imagem não estiver no daemon Docker local
+    if ! docker image inspect "$image" >/dev/null 2>&1; then
+        log "Baixando ${image}..."
+        docker pull "$image" 2>&1 || { warn "Pull de ${image} falhou, continuando."; return 0; }
+    fi
+
+    # Só carrega no nó kind se a imagem (pelo ID) ainda não estiver lá
+    local img_id
+    img_id=$(docker image inspect "$image" --format '{{.Id}}' 2>/dev/null | cut -d: -f2 | head -c12)
+    if [ -n "$img_id" ] && docker exec "$node" crictl images 2>/dev/null | grep -q "$img_id"; then
+        info "${image} já presente no nó kind."
+        return 0
+    fi
+
+    log "Carregando ${image} no nó kind..."
     kind load docker-image "$image" --name "$CLUSTER_NAME" 2>&1 || true
 )
 
