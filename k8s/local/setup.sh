@@ -105,7 +105,7 @@ kubectl config use-context "kind-${CLUSTER_NAME}"
 
 log "Configurando repositório helm do Traefik..."
 helm repo add traefik https://traefik.github.io/charts 2>/dev/null || true
-helm repo update traefik >/dev/null
+helm repo update traefik 2>/dev/null || warn "helm repo update falhou, usando cache local."
 
 # Release em estado 'failed' (ex: timeout anterior) impede upgrade — remove para reinstalar limpo
 if helm status traefik -n traefik 2>/dev/null | grep -q 'STATUS: failed'; then
@@ -117,17 +117,23 @@ fi
 
 log "Instalando/atualizando Traefik (pode levar até 5min no primeiro pull)..."
 
-# Pré-carrega a imagem do Traefik no nó kind para evitar timeout no --wait
-TRAEFIK_IMAGE=$(helm show values traefik/traefik 2>/dev/null \
-    | grep -A2 '^image:' | grep 'tag:' | awk '{print $2}' | head -1)
-TRAEFIK_REPO=$(helm show values traefik/traefik 2>/dev/null \
-    | grep -A2 '^image:' | grep 'repository:' | awk '{print $2}' | head -1)
-if [ -n "$TRAEFIK_REPO" ] && [ -n "$TRAEFIK_IMAGE" ]; then
-    FULL_IMAGE="${TRAEFIK_REPO}:${TRAEFIK_IMAGE}"
-    log "Pré-baixando imagem ${FULL_IMAGE} no nó kind..."
-    docker pull "$FULL_IMAGE" 2>/dev/null || true
-    kind load docker-image "$FULL_IMAGE" --name "$CLUSTER_NAME" 2>/dev/null || true
-fi
+# Tenta pré-carregar a imagem do Traefik no nó kind para evitar timeout no --wait.
+# Feito em subshell com set +e para nunca interromper o script principal.
+_preload_traefik_image() (
+    set +e
+    local values repo tag full_image
+    values=$(helm show values traefik/traefik 2>/dev/null) || return 0
+    repo=$(echo "$values" | awk '/^image:/{f=1} f && /repository:/{print $2; exit}')
+    tag=$(echo "$values"  | awk '/^image:/{f=1} f && /tag:/{print $2; exit}')
+    [ -z "$repo" ] || [ -z "$tag" ] && return 0
+    # Remove aspas que o YAML pode incluir no valor
+    repo=${repo//\"/}; tag=${tag//\"/}
+    full_image="${repo}:${tag}"
+    log "Pré-carregando ${full_image} no nó kind..."
+    docker pull "$full_image" 2>&1 || return 0
+    kind load docker-image "$full_image" --name "$CLUSTER_NAME" 2>&1 || return 0
+)
+_preload_traefik_image || true
 
 helm upgrade --install traefik traefik/traefik \
     --namespace traefik \
