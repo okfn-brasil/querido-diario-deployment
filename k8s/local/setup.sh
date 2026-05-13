@@ -26,13 +26,12 @@ command -v docker  >/dev/null 2>&1 || err "docker não encontrado."
 docker info >/dev/null 2>&1        || err "Docker daemon não está rodando."
 
 # Garante kind >= KIND_MIN_VERSION (v0.11 cria k8s 1.21, incompatível com Traefik chart moderno)
+# Usa sort -V para comparação correta de versões semânticas.
 _kind_ok() {
-    local v
-    v=$(kind version 2>/dev/null | grep -oP 'v\K[0-9]+\.[0-9]+' | head -1) || return 1
-    local major minor req_major req_minor
-    major=${v%%.*}; minor=${v##*.}
-    req_major=${KIND_MIN_VERSION%%.*}; req_minor=${KIND_MIN_VERSION##*[.-]}
-    [ "$major" -gt "$req_major" ] || { [ "$major" -eq "$req_major" ] && [ "$minor" -ge "$req_minor" ]; }
+    local current
+    current=$(kind version 2>/dev/null | grep -oP 'v\K[0-9]+\.[0-9]+\.[0-9]+' | head -1) || return 1
+    # sort -V -C retorna 0 se a entrada já estiver em ordem crescente (MIN <= current)
+    printf '%s\n%s\n' "$KIND_MIN_VERSION" "$current" | sort -V -C
 }
 
 if ! command -v kind >/dev/null 2>&1 || ! _kind_ok; then
