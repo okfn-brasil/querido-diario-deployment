@@ -156,21 +156,48 @@ kubectl rollout status daemonset/traefik -n traefik --timeout=300s
 
 info "Traefik pronto."
 
-# ─── 6. Aplica overlay dev ───────────────────────────────────────────────────
+# ─── 6. Pré-carrega imagens de infra dev ─────────────────────────────────────
+
+# Imagens grandes (postgres ~300MB, opensearch ~800MB) que demorariam muito
+# para baixar dentro do cluster. Puxamos no host e carregamos via kind load.
+_preload_image() (
+    set +e
+    local image="$1"
+    log "Pré-carregando ${image}..."
+    docker pull "$image" 2>&1 || { warn "Pull de ${image} falhou, continuando."; return 0; }
+    kind load docker-image "$image" --name "$CLUSTER_NAME" 2>&1 || true
+)
+
+DEV_INFRA_IMAGES=(
+    "postgres:13"
+    "opensearchproject/opensearch:2.9.0"
+    "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z"
+    "quay.io/minio/mc:RELEASE.2025-03-12T17-29-24Z"
+    "curlimages/curl:latest"
+    "busybox"
+)
+
+log "Pré-carregando imagens de infra dev no nó kind..."
+for img in "${DEV_INFRA_IMAGES[@]}"; do
+    _preload_image "$img" || true
+done
+
+# ─── 7. Aplica overlay dev ───────────────────────────────────────────────────
 
 log "Aplicando manifestos de desenvolvimento..."
 kubectl apply -k "$K8S_DIR/overlays/dev"
 
-# ─── 7. Aguarda infra ficar pronta ───────────────────────────────────────────
+# ─── 8. Aguarda infra ficar pronta ───────────────────────────────────────────
 
 log "Aguardando infra (postgres, opensearch, minio)..."
-kubectl rollout status deployment/postgres    -n "$NAMESPACE" --timeout=120s
-kubectl rollout status deployment/opensearch  -n "$NAMESPACE" --timeout=180s
-kubectl rollout status deployment/minio       -n "$NAMESPACE" --timeout=120s
+kubectl rollout status deployment/postgres   -n "$NAMESPACE" --timeout=120s
+kubectl rollout status deployment/minio      -n "$NAMESPACE" --timeout=120s
+# OpenSearch inicializa JVM + índices, pode demorar >2min mesmo com imagem local
+kubectl rollout status deployment/opensearch -n "$NAMESPACE" --timeout=300s
 
 log "Aguardando serviços de aplicação..."
 kubectl rollout status deployment/redis        -n "$NAMESPACE" --timeout=120s
-kubectl rollout status deployment/apache-tika  -n "$NAMESPACE" --timeout=180s
+kubectl rollout status deployment/apache-tika  -n "$NAMESPACE" --timeout=300s
 
 log "Aguardando jobs de inicialização..."
 kubectl wait job/minio-createbucket   -n "$NAMESPACE" --for=condition=complete --timeout=60s 2>/dev/null || \
