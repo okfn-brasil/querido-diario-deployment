@@ -121,14 +121,25 @@ log "Instalando/atualizando Traefik (pode levar até 5min no primeiro pull)..."
 # Feito em subshell com set +e para nunca interromper o script principal.
 _preload_traefik_image() (
     set +e
-    local values repo tag full_image
+    local chart_meta values registry repo tag full_image
+    # appVersion é a versão real usada quando tag: está vazio no values.yaml
+    chart_meta=$(helm show chart traefik/traefik 2>/dev/null) || return 0
+    tag=$(echo "$chart_meta" | awk '/^appVersion:/{print $2}')
     values=$(helm show values traefik/traefik 2>/dev/null) || return 0
-    repo=$(echo "$values" | awk '/^image:/{f=1} f && /repository:/{print $2; exit}')
-    tag=$(echo "$values"  | awk '/^image:/{f=1} f && /tag:/{print $2; exit}')
-    [ -z "$repo" ] || [ -z "$tag" ] && return 0
-    # Remove aspas que o YAML pode incluir no valor
-    repo=${repo//\"/}; tag=${tag//\"/}
-    full_image="${repo}:${tag}"
+    registry=$(echo "$values" | awk '/^image:/{f=1} f && /registry:/{gsub(/"/, "", $2); print $2; exit}')
+    repo=$(echo "$values"    | awk '/^image:/{f=1} f && /repository:/{gsub(/"/, "", $2); print $2; exit}')
+    # Remove aspas e ignora valores vazios ou comentários
+    tag=${tag//\"/};  tag=${tag//\'/}
+    repo=${repo//\"/}; repo=${repo//\'/}
+    registry=${registry//\"/}; registry=${registry//\'/}
+    [[ "$tag"  =~ ^#|^$ ]] && return 0
+    [[ "$repo" =~ ^#|^$ ]] && return 0
+    # Monta imagem: registry/repo:tag ou repo:tag se registry estiver vazio
+    if [ -n "$registry" ] && [[ ! "$registry" =~ ^# ]]; then
+        full_image="${registry}/${repo}:${tag}"
+    else
+        full_image="${repo}:${tag}"
+    fi
     log "Pré-carregando ${full_image} no nó kind..."
     docker pull "$full_image" 2>&1 || return 0
     kind load docker-image "$full_image" --name "$CLUSTER_NAME" 2>&1 || return 0
