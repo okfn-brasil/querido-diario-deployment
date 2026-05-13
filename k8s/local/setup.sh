@@ -107,12 +107,33 @@ log "Configurando repositório helm do Traefik..."
 helm repo add traefik https://traefik.github.io/charts 2>/dev/null || true
 helm repo update traefik >/dev/null
 
-log "Instalando/atualizando Traefik (aguarde ~60s)..."
+# Release em estado 'failed' (ex: timeout anterior) impede upgrade — remove para reinstalar limpo
+if helm status traefik -n traefik 2>/dev/null | grep -q 'STATUS: failed'; then
+    warn "Release traefik em estado 'failed'. Removendo para reinstalar..."
+    helm uninstall traefik -n traefik 2>/dev/null || true
+    kubectl delete namespace traefik --ignore-not-found 2>/dev/null || true
+    sleep 3
+fi
+
+log "Instalando/atualizando Traefik (pode levar até 5min no primeiro pull)..."
+
+# Pré-carrega a imagem do Traefik no nó kind para evitar timeout no --wait
+TRAEFIK_IMAGE=$(helm show values traefik/traefik 2>/dev/null \
+    | grep -A2 '^image:' | grep 'tag:' | awk '{print $2}' | head -1)
+TRAEFIK_REPO=$(helm show values traefik/traefik 2>/dev/null \
+    | grep -A2 '^image:' | grep 'repository:' | awk '{print $2}' | head -1)
+if [ -n "$TRAEFIK_REPO" ] && [ -n "$TRAEFIK_IMAGE" ]; then
+    FULL_IMAGE="${TRAEFIK_REPO}:${TRAEFIK_IMAGE}"
+    log "Pré-baixando imagem ${FULL_IMAGE} no nó kind..."
+    docker pull "$FULL_IMAGE" 2>/dev/null || true
+    kind load docker-image "$FULL_IMAGE" --name "$CLUSTER_NAME" 2>/dev/null || true
+fi
+
 helm upgrade --install traefik traefik/traefik \
     --namespace traefik \
     --create-namespace \
     --values "$SCRIPT_DIR/traefik-values.yaml" \
-    --wait --timeout 120s
+    --wait --timeout 300s
 
 info "Traefik pronto."
 
