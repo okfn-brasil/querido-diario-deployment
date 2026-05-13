@@ -66,8 +66,33 @@ fi
 
 # ─── 4. Cria cluster kind ────────────────────────────────────────────────────
 
+# Extrai a versão de nó esperada do kind-config.yaml
+EXPECTED_NODE_IMAGE=$(grep 'image:' "$SCRIPT_DIR/kind-config.yaml" | awk '{print $2}' | head -1)
+
+_cluster_node_ok() {
+    # Verifica se o cluster existente usa a imagem de nó esperada
+    local current_image
+    current_image=$(kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.osImage}' 2>/dev/null) || return 1
+    # Compara a versão k8s do nó com a versão esperada na imagem
+    local expected_ver current_ver
+    expected_ver=$(echo "$EXPECTED_NODE_IMAGE" | grep -oP 'v\K[0-9]+\.[0-9]+' | head -1)
+    current_ver=$(kubectl version --short 2>/dev/null | grep 'Server' | grep -oP 'v\K[0-9]+\.[0-9]+' | head -1) || \
+        current_ver=$(kubectl version 2>/dev/null | grep 'Server' | grep -oP 'v\K[0-9]+\.[0-9]+' | head -1)
+    [ "$current_ver" = "$expected_ver" ]
+}
+
 if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
-    info "Cluster '${CLUSTER_NAME}' já existe, pulando criação."
+    kubectl config use-context "kind-${CLUSTER_NAME}" 2>/dev/null || true
+    if _cluster_node_ok; then
+        info "Cluster '${CLUSTER_NAME}' já existe com a versão correta, pulando criação."
+    else
+        CURRENT_VER=$(kubectl version 2>/dev/null | grep -i server | grep -oP 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "desconhecida")
+        warn "Cluster existe com k8s ${CURRENT_VER}, mas a config requer ${EXPECTED_NODE_IMAGE}."
+        warn "Recriando cluster (dados locais serão perdidos)..."
+        kind delete cluster --name "$CLUSTER_NAME"
+        log "Criando cluster kind '${CLUSTER_NAME}' com ${EXPECTED_NODE_IMAGE}..."
+        kind create cluster --name "$CLUSTER_NAME" --config "$SCRIPT_DIR/kind-config.yaml"
+    fi
 else
     log "Criando cluster kind '${CLUSTER_NAME}'..."
     kind create cluster --name "$CLUSTER_NAME" --config "$SCRIPT_DIR/kind-config.yaml"
