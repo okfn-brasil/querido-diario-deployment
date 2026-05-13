@@ -10,10 +10,12 @@ ports:
   web:
     port: 8000          # porta interna do container Traefik
     hostPort: 80        # mapeia para a porta 80 do nó kind
-    expose: true
+    expose:
+      default: true
     exposedPort: 80
   websecure:
-    expose: false       # não expõe HTTPS em dev
+    expose:
+      default: false    # não expõe HTTPS em dev
 
 service:
   type: ClusterIP
