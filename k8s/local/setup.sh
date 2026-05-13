@@ -149,8 +149,10 @@ _preload_traefik_image || true
 helm upgrade --install traefik traefik/traefik \
     --namespace traefik \
     --create-namespace \
-    --values "$SCRIPT_DIR/traefik-values.yaml" \
-    --wait --timeout 300s
+    --values "$SCRIPT_DIR/traefik-values.yaml"
+
+log "Aguardando Traefik ficar pronto..."
+kubectl rollout status daemonset/traefik -n traefik --timeout=300s
 
 info "Traefik pronto."
 
