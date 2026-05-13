@@ -16,11 +16,38 @@ err()  { echo -e "${RED}[erro]${NC}  $*" >&2; exit 1; }
 
 # ─── 1. Verifica dependências ─────────────────────────────────────────────────
 
+KIND_MIN_VERSION="0.20.0"
+KIND_INSTALL_VERSION="0.24.0"
+KIND_BIN="${HOME}/.local/bin/kind"
+
 log "Verificando dependências..."
-command -v kind    >/dev/null 2>&1 || err "kind não encontrado. Instale em: https://kind.sigs.k8s.io/"
 command -v kubectl >/dev/null 2>&1 || err "kubectl não encontrado."
 command -v docker  >/dev/null 2>&1 || err "docker não encontrado."
 docker info >/dev/null 2>&1        || err "Docker daemon não está rodando."
+
+# Garante kind >= KIND_MIN_VERSION (v0.11 cria k8s 1.21, incompatível com Traefik chart moderno)
+_kind_ok() {
+    local v
+    v=$(kind version 2>/dev/null | grep -oP 'v\K[0-9]+\.[0-9]+' | head -1) || return 1
+    local major minor req_major req_minor
+    major=${v%%.*}; minor=${v##*.}
+    req_major=${KIND_MIN_VERSION%%.*}; req_minor=${KIND_MIN_VERSION##*[.-]}
+    [ "$major" -gt "$req_major" ] || { [ "$major" -eq "$req_major" ] && [ "$minor" -ge "$req_minor" ]; }
+}
+
+if ! command -v kind >/dev/null 2>&1 || ! _kind_ok; then
+    CURRENT=$(kind version 2>/dev/null || echo "não instalado")
+    warn "kind desatualizado ou ausente ($CURRENT). Mínimo necessário: v${KIND_MIN_VERSION}."
+    log "Instalando kind v${KIND_INSTALL_VERSION} em ${KIND_BIN}..."
+    mkdir -p "$(dirname "$KIND_BIN")"
+    curl -fsSLo "$KIND_BIN" \
+        "https://kind.sigs.k8s.io/dl/v${KIND_INSTALL_VERSION}/kind-linux-amd64"
+    chmod +x "$KIND_BIN"
+    export PATH="$(dirname "$KIND_BIN"):$PATH"
+    info "kind instalado: $(kind version)"
+else
+    info "kind ok: $(kind version)"
+fi
 
 # ─── 2. Verifica porta 80 ─────────────────────────────────────────────────────
 

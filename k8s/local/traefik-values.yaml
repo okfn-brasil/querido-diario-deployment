@@ -10,13 +10,10 @@ ports:
   web:
     port: 8000          # porta interna do container Traefik
     hostPort: 80        # mapeia para a porta 80 do nó kind
-    expose:
-      default: true
+    expose: true
     exposedPort: 80
   websecure:
-    port: 8443
-    expose:
-      default: false    # não expõe HTTPS em dev
+    expose: false       # não expõe HTTPS em dev
 
 service:
   type: ClusterIP
@@ -24,6 +21,7 @@ service:
 providers:
   kubernetesCRD:
     enabled: true
+    allowCrossNamespace: true
   kubernetesIngress:
     enabled: false
 
@@ -32,6 +30,3 @@ logs:
     level: DEBUG
   access:
     enabled: true
-
-# Sem ACME em dev
-certificatesResolvers: {}
