@@ -78,7 +78,7 @@ REPLACE_FILE_URL_BASE=true
 
 **Passo 3:** Reinicie API
 ```bash
-docker-compose restart querido-diario-api
+kubectl rollout restart deployment/api -n querido-diario
 ```
 
 **Resultado:**
@@ -193,39 +193,17 @@ curl -I https://bucket-name.s3.amazonaws.com/path/file.txt
 curl -I https://d1234567890.cloudfront.net/path/file.txt
 ```
 
-## Atualização do docker-compose.yml
+## Configuração no Kubernetes
 
-### API Service
-
-```yaml
-querido-diario-api:
-  environment:
-    QUERIDO_DIARIO_FILES_ENDPOINT: ${QUERIDO_DIARIO_FILES_ENDPOINT}
-    REPLACE_FILE_URL_BASE: ${REPLACE_FILE_URL_BASE:-false}
-```
-
-### Data Processing Service
-
-```yaml
-data-processing:
-  environment:
-    USE_RELATIVE_FILE_PATHS: ${USE_RELATIVE_FILE_PATHS:-false}
-    # Remover ou não definir QUERIDO_DIARIO_FILES_ENDPOINT aqui
-```
-
-## Atualização do .env
+As variáveis são definidas no `ConfigMap` (`k8s/base/configmap-app.yaml`) e no `Secret` (`app-secret`). Após alterar:
 
 ```bash
-# Storage Configuration
-STORAGE_ENDPOINT=https://querido-diario-bucket.s3.amazonaws.com
-STORAGE_BUCKET=querido-diario-bucket
-STORAGE_ACCESS_KEY=[sua-chave]
-STORAGE_ACCESS_SECRET=[seu-secret]
+# Aplicar as mudanças
+make k8s-apply-prod
 
-# File Access Configuration (NEW)
-QUERIDO_DIARIO_FILES_ENDPOINT=https://d1234567890.cloudfront.net
-REPLACE_FILE_URL_BASE=true
-USE_RELATIVE_FILE_PATHS=true
+# Ou forçar restart dos pods afetados
+kubectl rollout restart deployment/api -n querido-diario
+kubectl rollout restart deployment/data-processing -n querido-diario  # se aplicável
 ```
 
 ## Validação
@@ -278,7 +256,7 @@ Métricas importantes:
 Verificar erros de URL building:
 
 ```bash
-docker-compose logs -f querido-diario-api | grep -i "file_url"
+kubectl logs -n querido-diario deploy/api -f | grep -i "file_url"
 ```
 
 ## Rollback
@@ -286,13 +264,9 @@ docker-compose logs -f querido-diario-api | grep -i "file_url"
 Se necessário reverter:
 
 ```bash
-# .env
-QUERIDO_DIARIO_FILES_ENDPOINT=https://queridodiario.nyc3.digitaloceanspaces.com
-REPLACE_FILE_URL_BASE=false
-USE_RELATIVE_FILE_PATHS=false
-
-# Reiniciar serviços
-docker-compose restart querido-diario-api data-processing
+# Reverter ConfigMap/Secret e aplicar:
+make k8s-apply-prod
+kubectl rollout restart deployment/api -n querido-diario
 ```
 
 ## Custos Estimados
@@ -341,15 +315,12 @@ docker-compose restart querido-diario-api data-processing
 **Solução:**
 ```bash
 # Verificar configuração
-docker-compose exec querido-diario-api env | grep FILES_ENDPOINT
-docker-compose exec querido-diario-api env | grep REPLACE
+kubectl exec -n querido-diario deploy/api -- env | grep FILES_ENDPOINT
+kubectl exec -n querido-diario deploy/api -- env | grep REPLACE
 
-# Configurar corretamente
-export QUERIDO_DIARIO_FILES_ENDPOINT=https://d1234567890.cloudfront.net
-export REPLACE_FILE_URL_BASE=true
-
-# Reiniciar
-docker-compose restart querido-diario-api
+# Após corrigir o ConfigMap/Secret, aplicar e reiniciar:
+make k8s-apply-prod
+kubectl rollout restart deployment/api -n querido-diario
 ```
 
 ### Problema: CloudFront retorna 403
@@ -399,11 +370,10 @@ curl -I https://d1234567890.cloudfront.net/path/to/file.txt
 - [ ] Configurar custom error responses
 
 ### Deployment
-- [ ] Atualizar .env com novas variáveis
-- [ ] Atualizar docker-compose.yml (se necessário)
-- [ ] Documentar no Portainer (production)
-- [ ] Deploy via rolling update
-- [ ] Monitorar logs da API
+- [ ] Atualizar ConfigMap/Secret com novas variáveis
+- [ ] `make k8s-apply-prod`
+- [ ] `kubectl rollout restart deployment/api -n querido-diario`
+- [ ] Monitorar logs: `kubectl logs -n querido-diario deploy/api -f`
 
 ### Validação
 - [ ] Verificar URLs nas respostas da API
@@ -430,7 +400,7 @@ curl -I https://d1234567890.cloudfront.net/path/to/file.txt
 
 Para dúvidas ou problemas:
 
-1. Verificar logs: `docker-compose logs querido-diario-api`
+1. Verificar logs: `kubectl logs -n querido-diario deploy/api -f`
 2. Testar com script: `python test_file_url_building.py`
 3. Revisar variáveis de ambiente
 4. Consultar troubleshooting acima

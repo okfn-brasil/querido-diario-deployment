@@ -1,7 +1,24 @@
 # Configuração do Traefik
 
 > 📅 **Última atualização**: Novembro 2025 (CORS fix + Cloudflare SSL limitations)
-> ⚠️ **Versão**: Traefik v3.5 (integrado)
+> ⚠️ **Versão**: Traefik v3 via Helm (Kubernetes)
+
+## Instalação (Kubernetes)
+
+Traefik é instalado via Helm como DaemonSet com hostPort 80/443:
+
+```bash
+helm repo add traefik https://traefik.github.io/charts
+helm upgrade --install traefik traefik/traefik \
+  -n traefik --create-namespace \
+  -f k8s/local/traefik-values.yaml
+```
+
+O arquivo `k8s/local/traefik-values.yaml` contém a configuração base. Em produção, ajustar conforme necessário (ACME email, réplicas, etc.).
+
+Roteamento é feito via CRDs `IngressRoute` e `Middleware` do Traefik, definidos nos manifestos em `k8s/base/` e `k8s/base/traefik-middlewares.yaml`.
+
+---
 
 ## ⚠️ IMPORTANTE: Limitações de SSL do Cloudflare
 
@@ -32,90 +49,7 @@ DNS Configuration:
   www.backend-api.queridodiario    → DNS-only (gray cloud) → Traefik ✅
 ```
 
-## Visão Geral
-
-Após a refatoração, o Traefik foi **oficialmente integrado** ao docker-compose
-principal, eliminando a necessidade de configuração separada. O Traefik é
-automaticamente configurado e iniciado junto com os demais serviços.
-
-## ✅ Principais Mudanças
-
-- **Integração completa**: Traefik faz parte do `docker-compose.yml`
-- **Configuração automática**: SSL, middlewares e roteamento pré-configurados
-- **Desenvolvimento sem HTTPS**: HTTP local para facilitar desenvolvimento
-- **Produção com SSL automático**: Let's Encrypt integrado
-- **WWW redirect**: Redirecionamento automático de www para non-www
-- **Multi-level subdomain support**: SSL para todos os subdomínios via Let's Encrypt
-
-## Configuração Automática
-
-### Para Desenvolvimento
-
-```bash
-make dev
-```
-
-**Configuração automática:**
-- HTTP apenas (sem SSL)
-- Roteamento para `api.queridodiario.local` e `backend-api.queridodiario.local`
-- Middlewares de CORS e compressão
-      
-      # SSL Certificates
-      - --certificatesresolvers.letsencrypt.acme.email=admin@queridodiario.ok.org.br
-      - --certificatesresolvers.letsencrypt.acme.storage=/acme.json
-      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
-      
-      # Logging
-      - --log.level=INFO
-      - --accesslog=true
-    
-    ports:
-      - "80:80"
-      - "443:443"
-    
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik-acme:/acme.json
-    
-    networks:
-      - frontend
-    
-    labels:
-      # Redirect HTTP para HTTPS
-      - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
-      - "traefik.http.routers.http-catchall.entrypoints=web"
-      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-
-volumes:
-  traefik-acme:
-    driver: local
-
-networks:
-  frontend:
-    external: true
-```
-
-### Variáveis de Ambiente
-
-```bash
-# .env para Traefik
-ACME_EMAIL=admin@queridodiario.ok.org.br
-```
-
-## Configuração da Rede
-
-### Criar Network Frontend
-
-```bash
-# Criar network compartilhada
-docker network create frontend
-
-# Verificar se foi criada
-docker network ls | grep frontend
-```
-
-### Configuração DNS
+## Configuração DNS
 
 **CRÍTICO: Configure o Proxy Status corretamente no Cloudflare!**
 
@@ -159,43 +93,11 @@ CORS errors from www subdomain
 
 ## Labels do Traefik
 
-### Labels Automáticos
+## Middlewares (Kubernetes)
 
-O sistema de geração automática adiciona os labels necessários:
+Definidos em `k8s/base/traefik-middlewares.yaml` como recursos `Middleware` do Traefik CRD e referenciados nas `IngressRoute` de cada serviço.
 
-```yaml
-labels:
-  # Habilitar Traefik
-  - "traefik.enable=true"
-  - "traefik.docker.network=frontend"
-  
-  # Roteamento HTTP (redirect para HTTPS)
-  - "traefik.http.routers.querido-diario-api-http.rule=Host(`api.queridodiario.ok.org.br`)"
-  - "traefik.http.routers.querido-diario-api-http.entrypoints=web"
-  - "traefik.http.routers.querido-diario-api-http.middlewares=https-redirect"
-  
-  # Roteamento HTTPS
-  - "traefik.http.routers.querido-diario-api-https.rule=Host(`api.queridodiario.ok.org.br`)"
-  - "traefik.http.routers.querido-diario-api-https.entrypoints=websecure"
-  - "traefik.http.routers.querido-diario-api-https.tls=true"
-  - "traefik.http.routers.querido-diario-api-https.tls.certresolver=letsencrypt"
-  
-  # Configuração do serviço
-  - "traefik.http.services.querido-diario-api.loadbalancer.server.port=8080"
-```
-
-### Middlewares Personalizados
-
-Os middlewares são definidos globalmente no arquivo `docker-compose.traefik.yml` e **aplicados automaticamente** durante a geração do arquivo de produção.
-
-#### Aplicação Automática em Produção
-
-O script `generate-portainer-compose.py` aplica automaticamente os middlewares apropriados:
-
-- **API (`querido-diario-api`)**: `cors-headers,api-rate-limit,security-headers,compression`
-- **Backend (`querido-diario-backend`)**: `api-rate-limit,security-headers,compression`
-
-#### Middlewares Disponíveis
+### Middlewares disponíveis
 
 ```yaml
 # CORS Headers - Para APIs que precisam de CORS
@@ -228,160 +130,49 @@ compression:
   - Gzip/Deflate para responses
 ```
 
-#### Como Aplicar nos Serviços
+### Como aplicar nos serviços
 
-**Desenvolvimento Manual**: Para usar os middlewares em desenvolvimento ou configurações customizadas, adicione nas labels:
-
-```yaml
-# Exemplo: Configuração manual personalizada
-querido-diario-api:
-  labels:
-    - "traefik.http.routers.api-https.middlewares=cors-headers,rate-limit,security-headers"
-
-# Exemplo: Frontend apenas com segurança e compressão  
-querido-diario-frontend:
-  labels:
-    - "traefik.http.routers.frontend-https.middlewares=security-headers,compression"
-```
-
-**Produção**: Os middlewares são aplicados automaticamente pelo script `make generate-prod`:
-
-- ✅ **API**: CORS + Rate limiting restrito + Security headers + Compression
-- ✅ **Backend**: Rate limiting restrito + Security headers + Compression
-
-#### Customização
-
-Para ajustar os middlewares:
-
-1. **Definições globais**: Edite `docker-compose.traefik.example.yml`
-2. **Aplicação automática**: Edite `scripts/generate-portainer-compose.py`
-3. **Regenere os arquivos**: Execute `make generate-all`
-
-## Monitoramento
-
-### Logs
-
-```bash
-# Ver logs do Traefik
-docker logs traefik -f
-
-# Logs de acesso
-docker exec traefik cat /var/log/access.log
-
-# Verificar certificados
-docker exec traefik ls -la /acme.json
-```
-
-### Métricas
-
-Configure Prometheus para coletar métricas:
+Referencie o middleware na `IngressRoute` do serviço:
 
 ```yaml
-command:
-  - --metrics.prometheus=true
-  - --metrics.prometheus.addEntryPointsLabels=true
-  - --metrics.prometheus.addServicesLabels=true
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: api
+spec:
+  routes:
+    - match: Host(`api.queridodiario.ok.org.br`)
+      middlewares:
+        - name: cors-headers
+        - name: api-rate-limit
+        - name: security-headers
 ```
+
+Para customizar, edite `k8s/base/traefik-middlewares.yaml`.
 
 ## Troubleshooting
 
+### Logs do Traefik (k8s)
+
+```bash
+kubectl logs -n traefik -l app.kubernetes.io/name=traefik -f
+kubectl logs -n traefik -l app.kubernetes.io/name=traefik | grep acme
+kubectl logs -n traefik -l app.kubernetes.io/name=traefik | grep -i error
+```
+
 ### Certificados SSL
 
-```bash
-# Verificar certificados
-docker exec traefik cat /acme.json
-
-# Logs do ACME
-docker logs traefik | grep acme
-
-# Forçar renovação
-docker exec traefik rm /acme.json
-docker restart traefik
-```
-
-### Problemas de Roteamento
+O Traefik armazena certificados Let's Encrypt em um PVC. Para verificar:
 
 ```bash
-# Verificar logs do Traefik
-docker logs traefik | grep -i error
-
-# Testar conectividade
-docker exec traefik ping querido-diario-api
+kubectl get certificate -n querido-diario 2>/dev/null
+kubectl logs -n traefik -l app.kubernetes.io/name=traefik | grep "Certificate obtained"
 ```
 
-### Network Issues
+### Atualizações do Traefik
 
 ```bash
-# Verificar network
-docker network inspect frontend
-
-# Verificar containers na network
-docker network inspect frontend | jq '.[0].Containers'
-
-# Testar conectividade
-docker exec traefik ping querido-diario-api
-```
-
-## Segurança
-
-### Configurações de Segurança
-
-```yaml
-command:
-  # TLS mínimo
-  - --entrypoints.websecure.http.tls.options=modern@file
-  
-  # Headers de segurança
-  - --entrypoints.websecure.http.middlewares=security-headers@docker
-  
-  # Rate limiting global
-  - --entrypoints.websecure.http.middlewares=rate-limit@docker
-```
-
-### Firewall
-
-```bash
-# Permitir apenas portas necessárias
-ufw allow 80
-ufw allow 443
-ufw allow 22
-ufw --force enable
-```
-
-## Backup e Recuperação
-
-### Backup
-
-```bash
-# Backup dos certificados
-docker cp traefik:/acme.json ./backup/acme.json.backup
-
-# Backup da configuração
-cp docker-compose.traefik.yml ./backup/
-```
-
-### Recuperação
-
-```bash
-# Restaurar certificados
-docker cp ./backup/acme.json.backup traefik:/acme.json
-docker restart traefik
-```
-
-## Atualizações
-
-### Atualizar Traefik
-
-```bash
-# Fazer backup
-docker cp traefik:/acme.json ./acme.json.backup
-
-# Atualizar imagem
-docker pull traefik:v3.0
-docker compose -f docker-compose.traefik.yml up -d
-
-# Verificar funcionamento
-curl -I https://api.queridodiario.ok.org.br
+helm upgrade traefik traefik/traefik -n traefik -f k8s/local/traefik-values.yaml
 ```
 
 ## CORS e API Redirect (Novembro 2025)

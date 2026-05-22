@@ -1,72 +1,42 @@
-# Viabilidade: PostgreSQL e OpenSearch no Kubernetes
+# ADR-001: PostgreSQL e OpenSearch no Kubernetes
 
-> Análise gerada em 2026-05-09. Retomar quando a topologia do cluster for definida.
+**Data:** 2026-05-09  
+**Status:** Decidido e implementado
 
-## TL;DR
+## Contexto
 
-Técnicamente viável, mas o custo-benefício depende da topologia do cluster (single vs. multi-node).
+O cluster Kubernetes precisava de uma estratégia para PostgreSQL e OpenSearch. Redis já rodava como `Deployment` + PVC com sucesso, confirmando que workloads stateful básicos funcionam no cluster. A principal dúvida era sobre topologia (single-node vs. multi-node) e complexidade operacional.
 
----
+## Decisão
 
-## Contexto atual
+### PostgreSQL → CloudNativePG operator
 
-- Redis já roda no K8s com `Deployment` + `PVC` (`ReadWriteOnce`, 1Gi) — prova que workloads stateful básicos funcionam no cluster.
-- PostgreSQL e OpenSearch estão explicitamente fora do escopo K8s atual (`k8s/README.md`), provisionados externamente via `docker-compose.dbs.yml`.
-- 3 instâncias de PostgreSQL: `qd` (API), `backend` (Django), `receita`.
+**Adotado.** O cluster usa [CloudNativePG](https://cloudnative-pg.io/) para gerenciar PostgreSQL:
 
----
+- **Dev (kind):** 1 instância, 1Gi storage
+- **Produção:** 3 instâncias (primary + 2 replicas), 100Gi storage, StorageClass SSD
 
-## PostgreSQL no K8s
+Os três bancos (`queridodiario`, `backend`, `companies`) são criados automaticamente no primeiro boot via `postInitSQL` no `Cluster` manifest.
 
-**Viabilidade: Alta** — com as cautelas certas.
+Manifestos em `k8s/base/postgres/`.
 
-### Opções de implementação
+### OpenSearch → externo em produção, Deployment simples em dev
 
-| Abordagem | Complexidade | Adequado para |
-|---|---|---|
-| `StatefulSet` simples (padrão Redis atual) | Baixa | Single-node, sem HA |
-| [CloudNativePG](https://cloudnative-pg.io/) operator | Média | Multi-node, failover, backup nativo |
+**Mantido externo em produção.** OpenSearch exige `vm.max_map_count = 262144` no host e 2–4 GB de RAM por nó, o que torna custoso rodar com HA dentro do cluster. Em produção, um serviço OpenSearch gerenciado externo é mais adequado.
 
-### Riscos
+**Em desenvolvimento (kind):** roda como `Deployment` simples com `DISABLE_SECURITY_PLUGIN=true` e sem persistência — suficiente para testes locais.
 
-- **Storage**: PVC precisa de `StorageClass` com I/O de SSD. NFS é problemático para Postgres (locks, fsync).
-- **Backup**: No Docker Compose, backup é manual via volume ou `pg_dump`. No K8s, precisa de `CronJob` explícito — ou CloudNativePG resolve nativamente com WAL archiving.
-- **Single-node**: Risco de perda de dados equivalente ao Docker Compose no mesmo host — não piora, mas não melhora.
+Manifesto em `k8s/overlays/dev/infra/opensearch.yaml`.
 
----
+## Alternativas consideradas
 
-## OpenSearch no K8s
-
-**Viabilidade: Média** — mais exigente de recursos e configuração.
-
-### Requisitos obrigatórios
-
-1. **`vm.max_map_count = 262144`** no nó do host — configurar via `/etc/sysctl.conf` ou `initContainer` com `privileged: true`. Sem isso, OpenSearch não sobe.
-2. **Memória**: Mínimo ~2–4 GB por nó para uso real. O cluster precisa ter folga.
-3. **JVM heap**: Configurar via env `OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"`.
-
-### Opções de implementação
-
-| Abordagem | Complexidade | Adequado para |
-|---|---|---|
-| `StatefulSet` simples | Baixa | Single-node, sem HA |
-| [OpenSearch Operator](https://github.com/opensearch-project/opensearch-k8s-operator) | Média-alta | Multi-node, HA, rolling upgrades |
-
----
-
-## Decisão pendente: topologia do cluster
-
-| Topologia | Recomendação |
+| Alternativa | Descartada por |
 |---|---|
-| **Single-node** | Manter no Docker Compose separado. Migrar para K8s traz overhead sem ganho de resiliência. |
-| **Multi-node (≥ 2 nós)** | Migrar faz sentido — scheduling, restart automático, replicação (com operator). |
+| PostgreSQL como `StatefulSet` simples | Sem HA, backup manual — CloudNativePG resolve ambos nativamente |
+| OpenSearch Operator em produção | Overhead operacional alto; serviço externo gerenciado é mais simples |
+| PostgreSQL externo (como OpenSearch) | CloudNativePG no cluster é mais simples de operar e já provisionado |
 
----
+## Consequências
 
-## Próximos passos (quando retomar)
-
-1. Confirmar topologia do cluster (single vs. multi-node).
-2. Verificar `StorageClass` disponível e se há backend SSD.
-3. Decidir: `StatefulSet` simples ou operator (CloudNativePG / OpenSearch Operator).
-4. Criar manifestos K8s para os bancos escolhidos.
-5. Planejar estratégia de backup antes de migrar.
+- Backup do PostgreSQL: CloudNativePG suporta WAL archiving e backup via `ScheduledBackup` — ainda não configurado; item pendente antes de ir para produção com dados reais.
+- OpenSearch em prod: depende de serviço externo (ex: AWS OpenSearch Service, Bonsai). Configurado via secret `app-secret` na chave `QUERIDO_DIARIO_OPENSEARCH_HOST`.
