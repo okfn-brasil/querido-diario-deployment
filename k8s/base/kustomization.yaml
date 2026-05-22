@@ -26,3 +26,7 @@ resources:
   - celery-beat/deployment.yaml
   - celery-worker/deployment.yaml
   - data-processing/cronjob.yaml
+  - frontend/configmap-env.yaml
+  - frontend/deployment.yaml
+  - frontend/service.yaml
+  - frontend/ingressroute.yaml

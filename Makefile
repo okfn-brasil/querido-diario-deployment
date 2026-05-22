@@ -12,9 +12,13 @@
         k8s-build-base k8s-build-prod k8s-build-dev \
         k8s-apply-prod k8s-apply-dev k8s-diff-prod k8s-diff-dev \
         k8s-local-up k8s-local-down k8s-local-status k8s-local-hosts \
-        k8s-local-garage-ui k8s-local-data-processing
+        k8s-local-garage-ui k8s-local-data-processing \
+        k8s-local-frontend-build
 
 ENV_FILE ?= .env
+
+FRONTEND_DIR ?= ../querido-diario-frontend
+FRONTEND_IMAGE = ghcr.io/okfn-brasil/querido-diario-frontend
 
 COMPOSE_TRAEFIK  = docker compose -f docker-compose.traefik.yml  --env-file $(ENV_FILE)
 COMPOSE_SERVICES = docker compose -f docker-compose.yml           --env-file $(ENV_FILE)
@@ -185,9 +189,15 @@ k8s-local-hosts: ## Adiciona entradas ao /etc/hosts (requer sudo)
 	@echo "127.0.0.1  backend-api.queridodiario.local" | sudo tee -a /etc/hosts
 	@echo "Entradas adicionadas ao /etc/hosts."
 
+
+
 k8s-local-garage-ui: ## Abre port-forward para o Garage Web UI (http://localhost:3909)
 	kubectl port-forward svc/garage-webui 3909:3909 -n querido-diario
 
 k8s-local-data-processing: ## Executa data-processing manualmente no cluster local
 	kubectl create job --from=cronjob/data-processing data-processing-manual-$$(date +%s) \
 	    -n querido-diario
+
+k8s-local-frontend-build: ## Builda e carrega a imagem do frontend no cluster kind local
+	docker build -t $(FRONTEND_IMAGE):local $(FRONTEND_DIR)
+	kind load docker-image $(FRONTEND_IMAGE):local --name querido-diario-dev
