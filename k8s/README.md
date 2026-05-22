@@ -95,8 +95,17 @@ Ou manualmente:
 
 ### Buildar o frontend
 
-A imagem do frontend não é baixada do registry — é construída localmente a partir do código:
+A imagem do frontend não é baixada do registry — é construída localmente a partir do código.
 
+**Opção 1 — build com cache remoto (recomendado):**
+```bash
+make build-frontend              # buildx + cache do GHCR → :local no daemon Docker
+kind load docker-image ghcr.io/okfn-brasil/querido-diario-frontend:local \
+    --name querido-diario-dev    # carrega no cluster kind
+kubectl rollout restart deployment/frontend -n querido-diario
+```
+
+**Opção 2 — build simples + kind load em um passo:**
 ```bash
 make k8s-local-frontend-build   # docker build + kind load (~5min no primeiro run)
 kubectl rollout restart deployment/frontend -n querido-diario
@@ -104,6 +113,7 @@ kubectl rollout restart deployment/frontend -n querido-diario
 
 Por padrão busca o código em `../querido-diario-frontend`. Para outro caminho:
 ```bash
+make build-frontend FRONTEND_DIR=/outro/caminho
 make k8s-local-frontend-build FRONTEND_DIR=/outro/caminho
 ```
 

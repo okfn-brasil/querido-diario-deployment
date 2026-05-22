@@ -44,6 +44,33 @@ make help   # lista todos os comandos disponíveis
 
 ---
 
+## Build local de imagens
+
+Todos os serviços com código próprio têm targets para build local usando cache remoto do GHCR, acelerando o processo ao reaproveitar camadas já publicadas.
+
+```bash
+make build-api                   # ghcr.io/okfn-brasil/querido-diario-api:local
+make build-backend               # ghcr.io/okfn-brasil/querido-diario-backend:local
+make build-data-processing-base  # base de deps Python (rebuildar quando requirements.txt mudar)
+make build-data-processing       # ghcr.io/okfn-brasil/querido-diario-data-processing:local
+make build-tika                  # ghcr.io/okfn-brasil/querido-diario-data-processing/apache-tika:local
+make build-frontend              # ghcr.io/okfn-brasil/querido-diario-frontend:local
+
+make build-all                   # todas as imagens acima
+```
+
+Todos os builds usam `docker buildx` com `--cache-from type=registry,ref=<imagem>:latest` e produzem imagens com tag `:local` carregadas no daemon Docker local.
+
+Por padrão, os diretórios dos repositórios são esperados no mesmo nível deste repositório. Para sobrescrever:
+
+```bash
+make build-api API_DIR=/outro/caminho/querido-diario-api
+```
+
+Variáveis disponíveis: `API_DIR`, `BACKEND_DIR`, `DATA_PROCESSING_DIR`, `FRONTEND_DIR`.
+
+---
+
 ## Docker Compose
 
 Modo de deploy via Docker Compose. Adequado para ambientes simples ou máquinas sem k8s.
