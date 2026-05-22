@@ -9,6 +9,9 @@
         run-data-processing \
         shell-api shell-backend \
         check-env \
+        build-api build-backend \
+        build-data-processing-base build-data-processing build-tika \
+        build-frontend build-all \
         k8s-build-base k8s-build-prod k8s-build-dev \
         k8s-apply-prod k8s-apply-dev k8s-diff-prod k8s-diff-dev \
         k8s-local-up k8s-local-down k8s-local-status k8s-local-hosts \
@@ -17,8 +20,14 @@
 
 ENV_FILE ?= .env
 
-FRONTEND_DIR ?= ../querido-diario-frontend
-FRONTEND_IMAGE = ghcr.io/okfn-brasil/querido-diario-frontend
+REGISTRY = ghcr.io/okfn-brasil
+
+API_DIR              ?= ../querido-diario-api
+BACKEND_DIR          ?= ../querido-diario-backend/app
+DATA_PROCESSING_DIR  ?= ../querido-diario-data-processing
+FRONTEND_DIR         ?= ../querido-diario-frontend
+
+FRONTEND_IMAGE       = $(REGISTRY)/querido-diario-frontend
 
 COMPOSE_TRAEFIK  = docker compose -f docker-compose.traefik.yml  --env-file $(ENV_FILE)
 COMPOSE_SERVICES = docker compose -f docker-compose.yml           --env-file $(ENV_FILE)
@@ -56,8 +65,21 @@ help: ## Mostra esta mensagem de ajuda
 	@echo "  make k8s-diff-dev         # diff entre cluster e overlay dev"
 	@echo "  make k8s-diff-prod        # diff entre cluster e overlay producao"
 	@echo ""
+	@echo "Build local (com cache remoto):"
+	@echo "  make build-api                # API"
+	@echo "  make build-backend            # Backend/Celery"
+	@echo "  make build-data-processing-base  # base do Data Processing (deps Python)"
+	@echo "  make build-data-processing    # Data Processing"
+	@echo "  make build-tika               # Apache Tika"
+	@echo "  make build-frontend           # Frontend"
+	@echo "  make build-all                # todas as imagens acima"
+	@echo ""
 	@echo "Variaveis:"
-	@echo "  ENV_FILE=<path>  (padrao: .env)"
+	@echo "  ENV_FILE=<path>              (padrao: .env)"
+	@echo "  API_DIR=<path>               (padrao: ../querido-diario-api)"
+	@echo "  BACKEND_DIR=<path>           (padrao: ../querido-diario-backend/app)"
+	@echo "  DATA_PROCESSING_DIR=<path>   (padrao: ../querido-diario-data-processing)"
+	@echo "  FRONTEND_DIR=<path>          (padrao: ../querido-diario-frontend)"
 
 # --- Infraestrutura ---
 
@@ -149,6 +171,54 @@ shell-api: ## Abre shell no container da API
 shell-backend: ## Abre shell no container do Backend
 	$(COMPOSE_SERVICES) exec backend /bin/bash
 
+# --- Build local (com cache remoto do registry) ---
+
+build-api: ## Build local da imagem da API usando cache do registry
+	docker buildx build \
+	    --cache-from type=registry,ref=$(REGISTRY)/querido-diario-api:latest \
+	    --load \
+	    -t $(REGISTRY)/querido-diario-api:local \
+	    $(API_DIR)
+
+build-backend: ## Build local da imagem do Backend usando cache do registry
+	docker buildx build \
+	    --cache-from type=registry,ref=$(REGISTRY)/querido-diario-backend:latest \
+	    --load \
+	    -t $(REGISTRY)/querido-diario-backend:local \
+	    $(BACKEND_DIR)
+
+build-data-processing-base: ## Build local da imagem base do Data Processing (reconstruir quando requirements.txt mudar)
+	docker buildx build \
+	    --cache-from type=registry,ref=$(REGISTRY)/querido-diario-data-processing/base:latest \
+	    --load \
+	    -t $(REGISTRY)/querido-diario-data-processing/base:local \
+	    -f $(DATA_PROCESSING_DIR)/Dockerfile.base \
+	    $(DATA_PROCESSING_DIR)
+
+build-data-processing: ## Build local da imagem do Data Processing usando cache do registry
+	docker buildx build \
+	    --cache-from type=registry,ref=$(REGISTRY)/querido-diario-data-processing:latest \
+	    --load \
+	    -t $(REGISTRY)/querido-diario-data-processing:local \
+	    $(DATA_PROCESSING_DIR)
+
+build-tika: ## Build local da imagem do Apache Tika usando cache do registry
+	docker buildx build \
+	    --cache-from type=registry,ref=$(REGISTRY)/querido-diario-data-processing/apache-tika:latest \
+	    --load \
+	    -t $(REGISTRY)/querido-diario-data-processing/apache-tika:local \
+	    -f $(DATA_PROCESSING_DIR)/Dockerfile_apache_tika \
+	    $(DATA_PROCESSING_DIR)
+
+build-frontend: ## Build local da imagem do Frontend usando cache do registry
+	docker buildx build \
+	    --cache-from type=registry,ref=$(REGISTRY)/querido-diario-frontend:latest \
+	    --load \
+	    -t $(REGISTRY)/querido-diario-frontend:local \
+	    $(FRONTEND_DIR)
+
+build-all: build-api build-backend build-data-processing build-tika build-frontend ## Build local de todas as imagens usando cache do registry
+
 # --- Kubernetes (kustomize) ---
 
 k8s-build-base: ## Gera YAML da base k8s (dry-run, sem aplicar)
@@ -199,5 +269,5 @@ k8s-local-data-processing: ## Executa data-processing manualmente no cluster loc
 	    -n querido-diario
 
 k8s-local-frontend-build: ## Builda e carrega a imagem do frontend no cluster kind local
-	docker build -t $(FRONTEND_IMAGE):local $(FRONTEND_DIR)
+	docker build --network=host -t $(FRONTEND_IMAGE):local $(FRONTEND_DIR)
 	kind load docker-image $(FRONTEND_IMAGE):local --name querido-diario-dev
