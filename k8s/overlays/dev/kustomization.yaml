@@ -5,8 +5,6 @@ kind: Kustomization
 resources:
   - ../../base
   # Infra local (substituem serviços externos de produção)
-  - infra/configmap-postgres-init.yaml
-  - infra/postgres.yaml
   - infra/opensearch.yaml
   - infra/garage.yaml
   - infra/garage-webui.yaml
@@ -25,6 +23,27 @@ images:
     newTag: latest
 
 patches:
+  # ── Secret: credenciais PostgreSQL dev (via CNPG bootstrap) ───────────────
+  - path: infra/postgres-credentials-dev.yaml
+    target:
+      kind: Secret
+      name: postgres-credentials
+
+  # ── CNPG Cluster: ajustes para dev ────────────────────────────────────────
+  - patch: |-
+      - op: replace
+        path: /spec/storage/size
+        value: 5Gi
+      - op: replace
+        path: /spec/resources/limits/memory
+        value: 256Mi
+      - op: replace
+        path: /spec/resources/requests/memory
+        value: 128Mi
+    target:
+      kind: Cluster
+      name: postgres
+
   # ── Secret: valores dev sem sensibilidade ──────────────────────────────────
   - path: patch-secret-dev.yaml
     target:

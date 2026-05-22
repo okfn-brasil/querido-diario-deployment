@@ -9,6 +9,8 @@ resources:
   - configmap-app.yaml
   - secret-app.yaml
   - traefik-middlewares.yaml
+  - postgres/cluster.yaml
+  - postgres/credentials-secret.yaml
   - redis/pvc.yaml
   - redis/deployment.yaml
   - redis/service.yaml

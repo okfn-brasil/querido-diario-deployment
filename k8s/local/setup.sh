@@ -197,7 +197,8 @@ _preload_image() (
 )
 
 DEV_INFRA_IMAGES=(
-    "postgres:13"
+    "ghcr.io/cloudnative-pg/postgresql:15"
+    "ghcr.io/cloudnative-pg/cloudnative-pg:1.24.0"
     "opensearchproject/opensearch:2.9.0"
     "dxflrs/garage:v2.3.0"
     "khairul169/garage-webui:latest"
@@ -210,15 +211,34 @@ for img in "${DEV_INFRA_IMAGES[@]}"; do
     _preload_image "$img" || true
 done
 
-# ─── 7. Aplica overlay dev ───────────────────────────────────────────────────
+# ─── 7. Instala CloudNativePG operator ───────────────────────────────────────
+
+CNPG_VERSION="1.24.0"
+CNPG_RELEASE="1.24"
+
+if kubectl get deployment cnpg-controller-manager -n cnpg-system >/dev/null 2>&1; then
+    info "CloudNativePG operator já instalado."
+else
+    log "Instalando CloudNativePG v${CNPG_VERSION}..."
+    kubectl apply --server-side \
+        -f "https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-${CNPG_RELEASE}/releases/cnpg-${CNPG_VERSION}.yaml"
+    log "Aguardando CloudNativePG controller ficar pronto..."
+    kubectl rollout status deployment/cnpg-controller-manager -n cnpg-system --timeout=120s
+    info "CloudNativePG pronto."
+fi
+
+# ─── 8. Aplica overlay dev ───────────────────────────────────────────────────
 
 log "Aplicando manifestos de desenvolvimento..."
 kubectl apply -k "$K8S_DIR/overlays/dev"
 
-# ─── 8. Aguarda infra ficar pronta ───────────────────────────────────────────
+# ─── 10. Aguarda infra ficar pronta ──────────────────────────────────────────
 
-log "Aguardando infra (postgres, opensearch, garage)..."
-kubectl rollout status deployment/postgres   -n "$NAMESPACE" --timeout=120s
+log "Aguardando PostgreSQL (CloudNativePG)..."
+# CNPG Cluster define condition=Ready quando o primário está aceitando conexões
+kubectl wait cluster/postgres -n "$NAMESPACE" --for=condition=Ready --timeout=300s
+
+log "Aguardando infra (garage, opensearch)..."
 kubectl rollout status deployment/garage     -n "$NAMESPACE" --timeout=120s
 # OpenSearch inicializa JVM + índices, pode demorar >2min mesmo com imagem local
 kubectl rollout status deployment/opensearch -n "$NAMESPACE" --timeout=300s
@@ -232,7 +252,7 @@ log "Aguardando job de inicialização do OpenSearch..."
 kubectl wait job/opensearch-init -n "$NAMESPACE" --for=condition=complete --timeout=60s 2>/dev/null || \
     warn "Job opensearch-init não concluiu em 60s (pode já ter rodado antes)"
 
-# ─── 8. /etc/hosts ───────────────────────────────────────────────────────────
+# ─── 11. /etc/hosts ──────────────────────────────────────────────────────────
 
 HOSTS=(
     "queridodiario.local"
@@ -256,7 +276,7 @@ else
     info "/etc/hosts já configurado."
 fi
 
-# ─── 9. Resumo ───────────────────────────────────────────────────────────────
+# ─── 12. Resumo ──────────────────────────────────────────────────────────────
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"

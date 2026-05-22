@@ -36,6 +36,46 @@ patches:
       kind: Deployment
       name: celery-worker
 
-# O arquivo secret-app.env NÃO deve ser versionado com valores reais.
-# Crie-o localmente com: kubectl create secret generic app-secret ...
-# Ou use External Secrets Operator / Sealed Secrets.
+  # ── PostgreSQL via CloudNativePG ────────────────────────────────────────────
+  - patch: |-
+      - op: replace
+        path: /spec/instances
+        value: 3
+      - op: replace
+        path: /spec/storage/size
+        value: 100Gi
+      - op: replace
+        path: /spec/resources/limits/memory
+        value: 1Gi
+      - op: replace
+        path: /spec/resources/requests/memory
+        value: 800Mi
+      - op: add
+        path: /spec/resources/limits/cpu
+        value: "500m"
+      - op: add
+        path: /spec/resources/requests/cpu
+        value: "200m"
+      - op: replace
+        path: /spec/postgresql/parameters/shared_buffers
+        value: "256MB"
+    target:
+      kind: Cluster
+      name: postgres
+
+# ── Secrets de produção ────────────────────────────────────────────────────────
+# NÃO versione arquivos com credenciais reais.
+#
+# Crie o secret de credenciais do CNPG:
+#   kubectl create secret generic postgres-credentials \
+#     -n querido-diario \
+#     --from-literal=username='<usuario>' \
+#     --from-literal=password='<senha>'
+#
+# Crie o secret da aplicação:
+#   kubectl create secret generic app-secret \
+#     -n querido-diario \
+#     --from-literal=QD_BACKEND_SECRET_KEY='...' \
+#     ... (ver k8s/README.md para lista completa)
+#
+# Alternativas: Sealed Secrets ou External Secrets Operator.

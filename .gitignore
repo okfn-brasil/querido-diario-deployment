@@ -23,3 +23,6 @@ prod-traefik-services.yml
 k8s/overlays/*/secret-app.env
 k8s/overlays/*/*.secret.yaml
 k8s/base/secret-app-values.yaml
+
+# Arquivos do claude para não serem versionados
+.claude/settings.local.json
