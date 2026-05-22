@@ -12,6 +12,7 @@
         build-api build-backend \
         build-data-processing-base build-data-processing build-tika \
         build-frontend build-all \
+        spider-setup spider-list run-spider \
         k8s-build-base k8s-build-prod k8s-build-dev \
         k8s-apply-prod k8s-apply-dev k8s-diff-prod k8s-diff-dev \
         k8s-local-up k8s-local-down k8s-local-status k8s-local-hosts \
@@ -21,6 +22,8 @@
 ENV_FILE ?= .env
 
 REGISTRY = ghcr.io/okfn-brasil
+
+QD_DIR               ?= ../querido-diario
 
 API_DIR              ?= ../querido-diario-api
 BACKEND_DIR          ?= ../querido-diario-backend/app
@@ -65,6 +68,12 @@ help: ## Mostra esta mensagem de ajuda
 	@echo "  make k8s-diff-dev         # diff entre cluster e overlay dev"
 	@echo "  make k8s-diff-prod        # diff entre cluster e overlay producao"
 	@echo ""
+	@echo "Raspadores (execução local):"
+	@echo "  make spider-setup                          # cria venv e instala deps (uma vez)"
+	@echo "  make spider-list                           # lista todos os spiders"
+	@echo "  make run-spider SPIDER=<nome>              # executa um spider"
+	@echo "  make run-spider SPIDER=<nome> START=YYYY-MM-DD END=YYYY-MM-DD"
+	@echo ""
 	@echo "Build local (com cache remoto):"
 	@echo "  make build-api                # API"
 	@echo "  make build-backend            # Backend/Celery"
@@ -80,6 +89,10 @@ help: ## Mostra esta mensagem de ajuda
 	@echo "  BACKEND_DIR=<path>           (padrao: ../querido-diario-backend/app)"
 	@echo "  DATA_PROCESSING_DIR=<path>   (padrao: ../querido-diario-data-processing)"
 	@echo "  FRONTEND_DIR=<path>          (padrao: ../querido-diario-frontend)"
+	@echo "  QD_DIR=<path>                (padrao: ../querido-diario)"
+	@echo "  SPIDER=<nome>                nome do spider a executar"
+	@echo "  START=YYYY-MM-DD             data de inicio do raspador (opcional)"
+	@echo "  END=YYYY-MM-DD               data de fim do raspador (opcional)"
 
 # --- Infraestrutura ---
 
@@ -170,6 +183,29 @@ shell-api: ## Abre shell no container da API
 
 shell-backend: ## Abre shell no container do Backend
 	$(COMPOSE_SERVICES) exec backend /bin/bash
+
+# --- Raspadores (execução local, produção permanece na Zyte) ---
+
+spider-setup: ## Cria venv e instala dependências dos raspadores (executar uma vez)
+	python3 -m venv $(QD_DIR)/data_collection/.venv
+	$(QD_DIR)/data_collection/.venv/bin/pip install --upgrade pip
+	$(QD_DIR)/data_collection/.venv/bin/pip install -r $(QD_DIR)/data_collection/requirements.txt
+
+spider-list: ## Lista todos os raspadores disponíveis
+	@test -f $(QD_DIR)/data_collection/.venv/bin/scrapy || \
+	    (echo "ERRO: venv nao encontrado — execute: make spider-setup"; exit 1)
+	cd $(QD_DIR)/data_collection && .venv/bin/scrapy list
+
+run-spider: ## Executa um raspador localmente (SPIDER=nome [START=YYYY-MM-DD] [END=YYYY-MM-DD])
+	@test -n "$(SPIDER)" || \
+	    (echo "ERRO: defina SPIDER=<nome>   ex: make run-spider SPIDER=sp_campinas START=2025-01-01"; exit 1)
+	@test -f $(QD_DIR)/data_collection/.venv/bin/scrapy || \
+	    (echo "ERRO: venv nao encontrado — execute: make spider-setup"; exit 1)
+	cd $(QD_DIR)/data_collection && \
+	    if [ -f .local.env ]; then set -a; . ./.local.env; set +a; fi && \
+	    .venv/bin/scrapy crawl $(SPIDER) \
+	    $(if $(START),-a start=$(START)) \
+	    $(if $(END),-a end=$(END))
 
 # --- Build local (com cache remoto do registry) ---
 
