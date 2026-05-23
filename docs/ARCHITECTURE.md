@@ -23,8 +23,10 @@ A plataforma Querido Diário roda em Kubernetes (via Kustomize), com Traefik com
                 │
            [Storage S3]         ← Garage (dev) / AWS S3 (prod)
                 │
-         [Data Processing]      ← CronJob, agendado via Zyte em prod
+         [Data Processing]      ← CronJob k8s (agendado no cluster)
          [Apache Tika]
+
+         [Raspadores (Scrapy)]  ← rodam na Zyte, escrevem no Storage S3
 ```
 
 ## Serviços no cluster
@@ -40,7 +42,8 @@ A plataforma Querido Diário roda em Kubernetes (via Kustomize), com Traefik com
 | PostgreSQL (CloudNativePG) | gerenciado pelo operator | 1 instância | 3 instâncias |
 | OpenSearch | `opensearchproject/opensearch` | ✓ (Deployment) | externo |
 | Garage (S3-compatível) | `dxflrs/garage` | ✓ (Deployment) | externo (AWS S3) |
-| Data Processing | `ghcr.io/okfn-brasil/querido-diario-data-processing` | CronJob suspenso | agendado via Zyte |
+| Data Processing | `ghcr.io/okfn-brasil/querido-diario-data-processing` | CronJob suspenso | CronJob k8s ativo |
+| Raspadores (Scrapy) | — (Zyte gerencia) | `make run-spider` (local) | Zyte (Scrapy Cloud) |
 
 ## Estrutura Kustomize
 
@@ -103,15 +106,18 @@ Traefik v3 instalado via Helm com DaemonSet + hostPort 80/443. Roteamento via `I
 
 Cloudflare atua apenas no domínio principal (`queridodiario.ok.org.br`) como proxy. Subdomínios (`api.*`, `backend-api.*`) devem ser DNS-only para permitir que o Traefik emita certificados. Ver `docs/cloudflare-ssl-limitations.md`.
 
-## Raspadores (Data Processing)
+## Raspadores e Data Processing
 
-Em produção, os raspadores rodam na **Zyte (Scrapy Cloud)**, agendados via GitHub Actions no repositório `querido-diario`. O CronJob k8s existe mas fica suspenso em produção (`suspend: true` no overlay).
+São dois componentes distintos:
 
-Para execução local de testes:
+**Raspadores (`querido-diario`)** — coletam PDFs dos diários oficiais e salvam no Storage S3. Rodam na **Zyte (Scrapy Cloud)**, agendados via GitHub Actions. Para testes locais: `make run-spider`.
+
+**Data Processing (`querido-diario-data-processing`)** — processa os PDFs do S3 via Apache Tika, extrai texto e indexa no OpenSearch. Roda como **CronJob no cluster k8s** (ativo em produção, suspenso em dev).
 
 ```bash
-make spider-setup
+# Executar data-processing manualmente no cluster local (dev)
+make k8s-local-data-processing
+
+# Executar raspador localmente (testes)
 make run-spider SPIDER=<nome> START=2025-01-01
 ```
-
-Ver `README.md` para detalhes.
