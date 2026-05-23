@@ -1,0 +1,108 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: querido-diario
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/okfn-brasil/querido-diario-api:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: QUERIDO_DIARIO_OPENSEARCH_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QUERIDO_DIARIO_OPENSEARCH_HOST
+            - name: QUERIDO_DIARIO_OPENSEARCH_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QUERIDO_DIARIO_OPENSEARCH_USER
+            - name: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+            - name: POSTGRES_COMPANIES_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: POSTGRES_COMPANIES_HOST
+            - name: POSTGRES_COMPANIES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: POSTGRES_COMPANIES_USER
+            - name: POSTGRES_COMPANIES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: POSTGRES_COMPANIES_PASSWORD
+            - name: POSTGRES_AGGREGATES_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QD_DATA_DB_HOST
+            - name: POSTGRES_AGGREGATES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QD_DATA_DB_USER
+            - name: POSTGRES_AGGREGATES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QD_DATA_DB_PASSWORD
+            - name: QUERIDO_DIARIO_SUGGESTION_MAILJET_REST_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: MAILJET_API_KEY
+            - name: QUERIDO_DIARIO_SUGGESTION_MAILJET_REST_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: MAILJET_SECRET_KEY
+            - name: QUERIDO_DIARIO_SUGGESTION_RECIPIENT_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QUERIDO_DIARIO_SUGGESTION_RECIPIENT_EMAIL
+            - name: QUERIDO_DIARIO_SUGGESTION_SENDER_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: DEFAULT_FROM_EMAIL
+          resources:
+            limits:
+              memory: 768Mi
+            requests:
+              memory: 384Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10

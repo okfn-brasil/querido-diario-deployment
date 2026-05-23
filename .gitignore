@@ -1,30 +1,28 @@
-# Auto-generated files - DO NOT COMMIT
-# =====================================
-# These files are generated automatically by scripts and should not be committed.
-# Use the generation commands instead:
-#   make setup-env-dev      # Generate .env
-#   make setup-env-prod     # Generate .env.production
-#   make generate-dev       # Generate docker-compose.yml
-#   make generate-prod      # Generate docker-compose-portainer.yml
-#   make generate-traefik   # Generate docker-compose.traefik.yml
-#   make generate-all       # Generate all production files
+# Arquivos de ambiente com credenciais - NAO VERSIONAR
+# =====================================================
+# O arquivo .env no repositório é um template (sem valores sensíveis).
+# Crie uma cópia com os valores reais e nunca a versione.
 
-# Generated Docker Compose files
-docker-compose.yml
-docker-compose.dev.yml
-docker-compose-portainer.yml
-docker-compose.traefik.yml
-
-# Generated Environment files
-.env
 .env.production
 .env.local
 .env.staging
-
-# Backup environment files (if any)
 .env.backup*
 .env.*.backup
 
-# Legacy files (can be removed after migration)
-.env.example
-production-overrides.env
+# Arquivos temporários de instrução (usados apenas durante setup inicial)
+instructions-01.md
+instructions-02.md
+
+# Arquivos de prod capturados durante auditoria (não versionados)
+prod-compose-dbs.yml
+prod-compose-services.yml
+prod-compose-services-env-vars
+prod-traefik-services.yml
+
+# Secrets K8s com valores reais (nunca versionar)
+k8s/overlays/*/secret-app.env
+k8s/overlays/*/*.secret.yaml
+k8s/base/secret-app-values.yaml
+
+# Arquivos do claude para não serem versionados
+.claude/settings.local.json

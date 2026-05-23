@@ -1,0 +1,90 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Defina as imagens com tags fixas para produção (evite :latest)
+images:
+  - name: ghcr.io/okfn-brasil/querido-diario-api
+    newTag: "latest"  # substitua pela tag de release, ex: "v1.2.3"
+  - name: ghcr.io/okfn-brasil/querido-diario-backend
+    newTag: "latest"
+  - name: ghcr.io/okfn-brasil/querido-diario-data-processing
+    newTag: "latest"
+  - name: ghcr.io/okfn-brasil/querido-diario-data-processing/apache-tika
+    newTag: "latest"
+
+# Patches de configuração específica de produção
+patches:
+  # Frontend: mais réplicas em produção
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+    target:
+      kind: Deployment
+      name: frontend
+
+  # API: mais réplicas em produção
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+    target:
+      kind: Deployment
+      name: api
+
+  # Celery Worker: mais réplicas
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+    target:
+      kind: Deployment
+      name: celery-worker
+
+  # ── PostgreSQL via CloudNativePG ────────────────────────────────────────────
+  - patch: |-
+      - op: replace
+        path: /spec/instances
+        value: 3
+      - op: replace
+        path: /spec/storage/size
+        value: 100Gi
+      - op: replace
+        path: /spec/resources/limits/memory
+        value: 1Gi
+      - op: replace
+        path: /spec/resources/requests/memory
+        value: 800Mi
+      - op: add
+        path: /spec/resources/limits/cpu
+        value: "500m"
+      - op: add
+        path: /spec/resources/requests/cpu
+        value: "200m"
+      - op: replace
+        path: /spec/postgresql/parameters/shared_buffers
+        value: "256MB"
+    target:
+      kind: Cluster
+      name: postgres
+
+# ── Secrets de produção ────────────────────────────────────────────────────────
+# NÃO versione arquivos com credenciais reais.
+#
+# Crie o secret de credenciais do CNPG:
+#   kubectl create secret generic postgres-credentials \
+#     -n querido-diario \
+#     --from-literal=username='<usuario>' \
+#     --from-literal=password='<senha>'
+#
+# Crie o secret da aplicação:
+#   kubectl create secret generic app-secret \
+#     -n querido-diario \
+#     --from-literal=QD_BACKEND_SECRET_KEY='...' \
+#     ... (ver k8s/README.md para lista completa)
+#
+# Alternativas: Sealed Secrets ou External Secrets Operator.

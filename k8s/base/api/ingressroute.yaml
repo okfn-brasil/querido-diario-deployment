@@ -1,0 +1,61 @@
+---
+# api.queridodiario.ok.org.br
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: api
+  namespace: querido-diario
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`api.queridodiario.ok.org.br`)
+      kind: Rule
+      priority: 10
+      middlewares:
+        - name: api-strip-prefix
+        - name: cors-headers
+        - name: api-rate-limit
+        - name: security-headers
+        - name: compression
+      services:
+        - name: api
+          port: 8080
+    - match: Host(`www.api.queridodiario.ok.org.br`)
+      kind: Rule
+      priority: 200
+      middlewares:
+        - name: www-to-non-www
+      services:
+        - name: api
+          port: 8080
+    # /api/* no domínio principal → redirect para api.dominio
+    - match: Host(`queridodiario.ok.org.br`) && PathPrefix(`/api`)
+      kind: Rule
+      priority: 100
+      middlewares:
+        - name: cors-redirect
+        - name: api-redirect
+      services:
+        - name: api
+          port: 8080
+  tls:
+    certResolver: leresolver
+---
+# HTTP → HTTPS redirect para api.*
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: api-http
+  namespace: querido-diario
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`api.queridodiario.ok.org.br`) || Host(`www.api.queridodiario.ok.org.br`)
+      kind: Rule
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: api
+          port: 8080

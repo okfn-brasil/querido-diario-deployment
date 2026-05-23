@@ -1,0 +1,34 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+  namespace: querido-diario
+spec:
+  instances: 1
+
+  imageName: ghcr.io/cloudnative-pg/postgresql:15
+
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: "128MB"
+
+  bootstrap:
+    initdb:
+      database: queridodiario
+      owner: admin
+      secret:
+        name: postgres-credentials
+      postInitSQL:
+        - CREATE DATABASE backend OWNER admin
+        - CREATE DATABASE companies OWNER admin
+
+  storage:
+    size: 10Gi
+
+  resources:
+    limits:
+      memory: 512Mi
+    requests:
+      memory: 256Mi

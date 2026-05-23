@@ -1,0 +1,16 @@
+---
+# env.js servido como asset estático pelo nginx.
+# Sobrescrito por overlay (dev/prod) sem necessidade de rebuild da imagem.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-env
+  namespace: querido-diario
+data:
+  env.js: |
+    (function (window) {
+      window.__env = window.__env || {};
+      window.__env.envFileLoaded = true;
+      window.__env.apiUrl = 'https://api.queridodiario.ok.org.br';
+      window.__env.qdApiSearchResultMaxSize = 10000;
+    }(this));

@@ -1,0 +1,79 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: querido-diario
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/okfn-brasil/querido-diario-backend:latest
+          command:
+            - gunicorn
+            - config.wsgi:application
+            - -w
+            - "2"
+            - -b
+            - :8000
+            - --log-level
+            - info
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: QD_BACKEND_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QD_BACKEND_SECRET_KEY
+            - name: QD_BACKEND_DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QD_BACKEND_DB_URL
+            - name: MAILJET_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: MAILJET_API_KEY
+            - name: MAILJET_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: MAILJET_SECRET_KEY
+          resources:
+            limits:
+              memory: 768Mi
+            requests:
+              memory: 384Mi
+          livenessProbe:
+            httpGet:
+              path: /health/
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: static-files
+              mountPath: /opt/app/static
+      volumes:
+        - name: static-files
+          persistentVolumeClaim:
+            claimName: static-files

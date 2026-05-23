@@ -1,0 +1,14 @@
+---
+# Cluster kind para desenvolvimento local do Querido Diário
+# Mapeia host:80 → kind-node:80 para o Traefik (web entrypoint via hostPort)
+# Imagem fixada em k8s 1.29 — requer kind >= 0.20
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: querido-diario-dev
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.31.2
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP

@@ -1,0 +1,60 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: querido-diario
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7
+          command:
+            - redis-server
+            - --port
+            - "6378"
+            - --maxmemory
+            - 200mb
+            - --maxmemory-policy
+            - allkeys-lru
+          ports:
+            - containerPort: 6378
+          resources:
+            limits:
+              memory: 256Mi
+            requests:
+              memory: 64Mi
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -p
+                - "6378"
+                - ping
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -p
+                - "6378"
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-data

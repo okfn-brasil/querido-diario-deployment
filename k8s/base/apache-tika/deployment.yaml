@@ -1,0 +1,51 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apache-tika
+  namespace: querido-diario
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: apache-tika
+  template:
+    metadata:
+      labels:
+        app: apache-tika
+    spec:
+      containers:
+        - name: apache-tika
+          image: ghcr.io/okfn-brasil/querido-diario-data-processing/apache-tika:latest
+          command:
+            - java
+            - -jar
+            - /tika-server.jar
+            - --host
+            - 0.0.0.0
+          ports:
+            - containerPort: 9998
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: JAVA_TOOL_OPTIONS
+          resources:
+            limits:
+              memory: 2500Mi
+            requests:
+              memory: 1200Mi
+          livenessProbe:
+            httpGet:
+              path: /version
+              port: 9998
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /version
+              port: 9998
+            initialDelaySeconds: 15
+            periodSeconds: 10

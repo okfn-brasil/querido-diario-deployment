@@ -1,148 +1,123 @@
-# Arquitetura do Querido Diário Deployment
+# Arquitetura do Querido Diário — Deployment
 
-## Visão Geral da Infraestrutura
+## Visão Geral
 
-O sistema de deployment do Querido Diário orquestra uma plataforma completa 
-de transparência pública através de containers Docker, com suporte a dois 
-ambientes principais: desenvolvimento local e produção distribuída.
+A plataforma Querido Diário roda em Kubernetes (via Kustomize), com Traefik como ingress controller e CloudNativePG para PostgreSQL. Storage de arquivos e OpenSearch são provisionados externamente em produção; em desenvolvimento local (kind), rodam como Deployments simples dentro do próprio cluster.
 
-## Componentes da Plataforma
+## Diagrama de componentes
 
-```mermaid
-graph TD
-    U[Usuários] --> T[Traefik]
-    T --> API[API FastAPI]
-    T --> BE[Backend Django]
-    T --> FE[Frontend Angular]
-    
-    API --> PG[PostgreSQL]
-    API --> OS[OpenSearch]
-    API --> S3[MinIO/S3]
-    
-    BE --> PG2[PostgreSQL Backend]
-    BE --> R[Redis]
-    
-    DP[Data Processing] --> PG
-    DP --> OS
-    DP --> S3
-    DP --> AT[Apache Tika]
+```
+                        Internet
+                           │
+                    [Cloudflare DNS]
+                           │
+                      [Traefik v3]          ← instalado via Helm
+                     /     │     \
+                    /      │      \
+               [API]  [Backend]  [Frontend]
+             FastAPI   Django      nginx
+                │    /   │   \
+                │   /    │    \
+           [PostgreSQL] [Redis] [OpenSearch]
+           CloudNativePG        (externo em prod)
+                │
+           [Storage S3]         ← Garage (dev) / AWS S3 (prod)
+                │
+         [Data Processing]      ← CronJob k8s (agendado no cluster)
+         [Apache Tika]
+
+         [Raspadores (Scrapy)]  ← rodam na Zyte, escrevem no Storage S3
 ```
 
-## Perfis de Deployment
+## Serviços no cluster
 
-### Profile: `dev` (Desenvolvimento)
-```yaml
-# Infraestrutura 100% local
-services:
-  postgres:     # Container local
-  opensearch:   # Container local  
-  minio:        # Container local
-  redis:        # Container local
-  
-  api:          # Conecta na infra local
-  backend:      # Conecta na infra local
-  
-  traefik:      # HTTP, sem SSL
+| Serviço | Imagem | Dev | Prod |
+|---|---|---|---|
+| Frontend (nginx/Angular) | `ghcr.io/okfn-brasil/querido-diario-frontend` | ✓ | ✓ |
+| API (FastAPI) | `ghcr.io/okfn-brasil/querido-diario-api` | ✓ | ✓ |
+| Backend (Django) | `ghcr.io/okfn-brasil/querido-diario-backend` | ✓ | ✓ |
+| Celery Beat + Worker | `ghcr.io/okfn-brasil/querido-diario-backend` | ✓ | ✓ |
+| Apache Tika | `ghcr.io/okfn-brasil/querido-diario-data-processing/apache-tika` | ✓ | ✓ |
+| Redis | `redis:7` | ✓ | ✓ |
+| PostgreSQL (CloudNativePG) | gerenciado pelo operator | 1 instância | 3 instâncias |
+| OpenSearch | `opensearchproject/opensearch` | ✓ (Deployment) | externo |
+| Garage (S3-compatível) | `dxflrs/garage` | ✓ (Deployment) | externo (AWS S3) |
+| Data Processing | `ghcr.io/okfn-brasil/querido-diario-data-processing` | CronJob suspenso | CronJob k8s ativo |
+| Raspadores (Scrapy) | — (Zyte gerencia) | `make run-spider` (local) | Zyte (Scrapy Cloud) |
+
+## Estrutura Kustomize
+
+```
+k8s/
+├── base/               # recursos compartilhados entre overlays
+│   ├── api/
+│   ├── backend/
+│   ├── celery-beat/
+│   ├── celery-worker/
+│   ├── frontend/
+│   ├── apache-tika/
+│   ├── redis/
+│   ├── data-processing/
+│   ├── postgres/       # CloudNativePG Cluster
+│   ├── configmap-app.yaml
+│   ├── secret-app.yaml     # TEMPLATE — não versionar com valores reais
+│   └── traefik-middlewares.yaml
+├── overlays/
+│   ├── production/     # 2+ réplicas, 100Gi postgres, imagens fixadas
+│   └── dev/            # kind: infra embutida (OpenSearch, Garage), limites menores
+│       └── infra/
+│           ├── opensearch.yaml
+│           ├── garage.yaml
+│           ├── garage-webui.yaml
+│           └── init-jobs.yaml
+└── local/              # scripts para cluster kind local
+    ├── setup.sh        # idempotente: kind + Traefik + CNPG operator + overlay dev
+    └── teardown.sh
 ```
 
-### Profile: `prod` (Produção)
-```yaml
-# Infraestrutura externa
-services:
-  api:          # Conecta em PostgreSQL/OpenSearch externos
-  backend:      # Conecta em PostgreSQL/Redis externos
-  
-  traefik:      # HTTPS com Let's Encrypt
+## Fluxo de configuração
+
+### Desenvolvimento local (kind)
+
+```bash
+make k8s-local-up       # cria cluster + aplica overlay dev (~10min no 1o run)
+make k8s-local-hosts    # adiciona entradas ao /etc/hosts (requer sudo)
 ```
 
-### Profile: `processing` (Processamento)
-```yaml
-services:
-  data-processing:  # Jobs de ETL
-  apache-tika:      # Extração de texto
+Configuração não-sensível em `k8s/base/configmap-app.yaml`. Credenciais aplicadas pelo overlay dev via arquivos de template em `k8s/overlays/dev/`.
+
+### Produção
+
+```bash
+# Criar secrets (uma vez)
+kubectl create secret generic app-secret -n querido-diario --from-literal=...
+kubectl create secret generic postgres-credentials -n querido-diario --from-literal=...
+
+# Deploy
+make k8s-diff-prod      # revisar antes
+make k8s-apply-prod
 ```
 
-## Fluxo de Configuração
+Ver `k8s/README.md` para o guia completo de produção.
 
-### Desenvolvimento
-1. `make dev` → Gera `.env` com configurações locais
-2. Docker Compose usa profile `dev`
-3. Todos os serviços sobem em containers locais
-4. Traefik configura roteamento HTTP
-5. Domínio local: `queridodiario.local`
+## Roteamento e SSL
 
-### Produção  
-1. `make setup-env-prod` → Gera `.env` do template
-2. Administrador configura variáveis externas
-3. Docker Compose usa profile `prod`
-4. Traefik obtém certificados SSL automaticamente
-5. Serviços conectam em infraestrutura externa
+Traefik v3 instalado via Helm com DaemonSet + hostPort 80/443. Roteamento via `IngressRoute` CRDs. SSL via Let's Encrypt (ACME HTTP-01).
 
-## Padrões de Rede
+Cloudflare atua apenas no domínio principal (`queridodiario.ok.org.br`) como proxy. Subdomínios (`api.*`, `backend-api.*`) devem ser DNS-only para permitir que o Traefik emita certificados. Ver `docs/cloudflare-ssl-limitations.md`.
 
-### Networks
-- **frontend**: Externa, compartilhada com Traefik
-- **backend**: Interna, comunicação entre serviços
+## Raspadores e Data Processing
 
-### Roteamento Traefik
-```yaml
-# Padrão de labels para roteamento
-labels:
-  - "traefik.http.routers.${SERVICE}.rule=Host(`${SERVICE}.${DOMAIN}`)"
-  - "traefik.http.routers.${SERVICE}.tls.certresolver=leresolver"
+São dois componentes distintos:
+
+**Raspadores (`querido-diario`)** — coletam PDFs dos diários oficiais e salvam no Storage S3. Rodam na **Zyte (Scrapy Cloud)**, agendados via GitHub Actions. Para testes locais: `make run-spider`.
+
+**Data Processing (`querido-diario-data-processing`)** — processa os PDFs do S3 via Apache Tika, extrai texto e indexa no OpenSearch. Roda como **CronJob no cluster k8s** (ativo em produção, suspenso em dev).
+
+```bash
+# Executar data-processing manualmente no cluster local (dev)
+make k8s-local-data-processing
+
+# Executar raspador localmente (testes)
+make run-spider SPIDER=<nome> START=2025-01-01
 ```
-
-## Gerenciamento de Estado
-
-### Volumes Persistentes
-- `postgres-data`: Dados do PostgreSQL (dev)
-- `opensearch-data`: Índices de busca (dev) 
-- `minio-data`: Arquivos de gazetas (dev)
-- `redis-data`: Cache e filas (dev)
-- `static-files`: Assets estáticos
-- `traefik-acme`: Certificados SSL
-
-### Configuração via Environment
-- Templates em `templates/env.prod.sample`
-- Interpolação Docker Compose: `${VAR}`
-- Separação dev/prod por variáveis
-
-## Automação via Makefile
-
-### Comandos Principais
-- `make dev`: Ambiente completo de desenvolvimento
-- `make prod`: Deploy de produção
-- `make validate`: Validação de sintaxe
-- `make logs-{service}`: Logs específicos
-- `make shell-{service}`: Acesso aos containers
-
-### Padrões de Targets
-```makefile
-# Targets com documentação
-target: ## Descrição do que faz
-    @echo "🔄 Executando ação..."
-    comando
-
-# Targets parametrizados  
-logs-%: ## Logs de serviço específico
-    docker compose logs -f $*
-```
-
-## Estratégias de Monitoramento
-
-### Health Checks
-Todos os serviços críticos implementam health checks:
-
-```yaml
-healthcheck:
-  test: ["CMD-SHELL", "curl -f http://localhost/health"]
-  interval: 30s
-  timeout: 10s
-  retries: 3
-  start_period: 40s
-```
-
-### Observabilidade
-- Logs centralizados via Docker Compose
-- Traefik dashboard para métricas de proxy
-- Health endpoints em todos os serviços

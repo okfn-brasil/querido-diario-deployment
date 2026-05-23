@@ -1,0 +1,149 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  # Infra local (substituem serviços externos de produção)
+  - infra/opensearch.yaml
+  - infra/garage.yaml
+  - infra/garage-webui.yaml
+  - infra/init-jobs.yaml
+  # IngressRoutes HTTP para *.queridodiario.local
+  - ingressroutes-dev.yaml
+
+images:
+  - name: ghcr.io/okfn-brasil/querido-diario-api
+    newTag: latest
+  - name: ghcr.io/okfn-brasil/querido-diario-backend
+    newTag: latest
+  - name: ghcr.io/okfn-brasil/querido-diario-data-processing
+    newTag: latest
+  - name: ghcr.io/okfn-brasil/querido-diario-data-processing/apache-tika
+    newTag: latest
+  - name: ghcr.io/okfn-brasil/querido-diario-frontend
+    newTag: local
+
+patches:
+  # ── Secret: credenciais PostgreSQL dev (via CNPG bootstrap) ───────────────
+  - path: infra/postgres-credentials-dev.yaml
+    target:
+      kind: Secret
+      name: postgres-credentials
+
+  # ── CNPG Cluster: ajustes para dev ────────────────────────────────────────
+  - patch: |-
+      - op: replace
+        path: /spec/storage/size
+        value: 5Gi
+      - op: replace
+        path: /spec/resources/limits/memory
+        value: 256Mi
+      - op: replace
+        path: /spec/resources/requests/memory
+        value: 128Mi
+    target:
+      kind: Cluster
+      name: postgres
+
+  # ── Secret: valores dev sem sensibilidade ──────────────────────────────────
+  - path: patch-secret-dev.yaml
+    target:
+      kind: Secret
+      name: app-secret
+
+  # ── ConfigMap: domínio e endpoints locais ─────────────────────────────────
+  - patch: |-
+      - op: replace
+        path: /data/DOMAIN
+        value: queridodiario.local
+      - op: replace
+        path: /data/QD_API_URL
+        value: http://api.queridodiario.local
+      - op: replace
+        path: /data/QD_BACKEND_DEBUG
+        value: "True"
+      - op: replace
+        path: /data/QD_BACKEND_ALLOWED_HOSTS
+        value: "*"
+      - op: replace
+        path: /data/STATIC_URL
+        value: http://backend-api.queridodiario.local/api/static/
+      - op: replace
+        path: /data/FRONT_BASE_URL
+        value: http://localhost:4200
+      - op: replace
+        path: /data/CELERY_BROKER_URL
+        value: redis://redis:6378
+      - op: replace
+        path: /data/CELERY_RESULT_BACKEND
+        value: redis://redis:6378
+      - op: replace
+        path: /data/STORAGE_ENDPOINT
+        value: http://garage:3900
+      - op: replace
+        path: /data/QUERIDO_DIARIO_FILES_ENDPOINT
+        value: http://garage:3900/queridodiariobucket
+    target:
+      kind: ConfigMap
+      name: app-config
+
+  # ── API: limites menores ───────────────────────────────────────────────────
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 512Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 256Mi
+    target:
+      kind: Deployment
+      name: api
+
+  # ── Backend: limites menores ───────────────────────────────────────────────
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 512Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 256Mi
+    target:
+      kind: Deployment
+      name: backend
+
+  # ── Tika: limites menores ──────────────────────────────────────────────────
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 1500Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 512Mi
+    target:
+      kind: Deployment
+      name: apache-tika
+
+  # ── CronJob data-processing: suspenso em dev (execute manualmente) ─────────
+  - patch: |-
+      - op: replace
+        path: /spec/suspend
+        value: true
+    target:
+      kind: CronJob
+      name: data-processing
+
+  # ── Frontend: env.js aponta para API local ────────────────────────────────
+  - patch: |-
+      - op: replace
+        path: /data/env.js
+        value: |
+          (function (window) {
+            window.__env = window.__env || {};
+            window.__env.envFileLoaded = true;
+            window.__env.apiUrl = 'http://api.queridodiario.local';
+            window.__env.qdApiSearchResultMaxSize = 10000;
+          }(this));
+    target:
+      kind: ConfigMap
+      name: frontend-env

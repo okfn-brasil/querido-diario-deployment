@@ -1,0 +1,61 @@
+---
+# Cria o índice do OpenSearch após o serviço estar pronto
+# Nota: Garage não precisa de job de init — bucket e key são criados
+# automaticamente via --single-node --default-bucket na inicialização.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opensearch-init
+  namespace: querido-diario
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: curl
+          image: curlimages/curl:latest
+          env:
+            - name: OPENSEARCH_HOST
+              value: http://opensearch:9200
+            - name: INDEX_NAME
+              value: queridodiario
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Aguardando OpenSearch..."
+              until curl -sf "$OPENSEARCH_HOST/_cluster/health" > /dev/null; do
+                sleep 3
+              done
+              echo "OpenSearch disponível."
+
+              HTTP=$(curl -so /dev/null -w "%{http_code}" "$OPENSEARCH_HOST/$INDEX_NAME")
+              if [ "$HTTP" = "200" ]; then
+                echo "Índice '$INDEX_NAME' já existe."
+                exit 0
+              fi
+
+              echo "Criando índice '$INDEX_NAME'..."
+              curl -sf -X PUT "$OPENSEARCH_HOST/$INDEX_NAME" \
+                -H "Content-Type: application/json" \
+                -d '{
+                  "settings": {
+                    "number_of_shards": 1,
+                    "number_of_replicas": 0
+                  },
+                  "mappings": {
+                    "properties": {
+                      "source_text": { "type": "text", "fields": { "exact": { "type": "keyword" } } },
+                      "date":           { "type": "date" },
+                      "scraped_at":     { "type": "date" },
+                      "territory_id":   { "type": "keyword" },
+                      "territory_name": { "type": "text" },
+                      "state_code":     { "type": "keyword" },
+                      "file_path":      { "type": "keyword" },
+                      "file_url":       { "type": "keyword" },
+                      "processed":      { "type": "boolean" }
+                    }
+                  }
+                }'
+              echo ""
+              echo "Índice '$INDEX_NAME' criado."

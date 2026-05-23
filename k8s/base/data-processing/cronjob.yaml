@@ -1,0 +1,94 @@
+---
+# CronJob equivalente ao serviço data-processing com restart: "no" no compose.
+# Por padrão roda a cada hora; ajuste .spec.schedule conforme necessidade.
+# Execução manual: kubectl create job --from=cronjob/data-processing data-processing-manual -n querido-diario
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: data-processing
+  namespace: querido-diario
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: data-processing
+              image: ghcr.io/okfn-brasil/querido-diario-data-processing:latest
+              command:
+                - python
+                - main
+              envFrom:
+                - configMapRef:
+                    name: app-config
+              env:
+                - name: QUERIDO_DIARIO_OPENSEARCH_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_HOST
+                - name: QUERIDO_DIARIO_OPENSEARCH_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_USER
+                - name: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+                - name: POSTGRES_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QD_DATA_DB_HOST
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QD_DATA_DB_USER
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QD_DATA_DB_PASSWORD
+                - name: STORAGE_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: STORAGE_ACCESS_KEY
+                - name: STORAGE_ACCESS_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: STORAGE_ACCESS_SECRET
+                - name: STORAGE_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: STORAGE_BUCKET
+                - name: OPENSEARCH_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_HOST
+                - name: OPENSEARCH_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_USER
+                - name: OPENSEARCH_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+              resources:
+                limits:
+                  memory: 2048Mi
+                requests:
+                  memory: 512Mi

@@ -1,5 +1,7 @@
 # Configuração de SSL e Redirecionamentos do Traefik
 
+> **Contexto:** Este documento descreve os princípios de roteamento SSL aplicados ao Traefik no cluster Kubernetes. Em k8s, o roteamento é configurado via `IngressRoute` CRDs e `Middleware` (definidos em `k8s/base/traefik-middlewares.yaml`), não via labels de Docker Compose. Os conceitos de prioridade de routers, ACME challenge handling e redirect WWW→non-WWW se aplicam igualmente.
+
 ## Resumo das Alterações
 
 Este documento descreve as configurações implementadas no `docker-compose.yml` para garantir o correto funcionamento de SSL/TLS, redirecionamentos WWW e ACME challenges.

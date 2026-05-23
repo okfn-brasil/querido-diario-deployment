@@ -1,0 +1,48 @@
+---
+# backend-api.queridodiario.ok.org.br
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: backend
+  namespace: querido-diario
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`backend-api.queridodiario.ok.org.br`)
+      kind: Rule
+      middlewares:
+        - name: cors-headers
+        - name: api-rate-limit
+        - name: security-headers
+        - name: compression
+      services:
+        - name: backend
+          port: 8000
+    - match: Host(`www.backend-api.queridodiario.ok.org.br`)
+      kind: Rule
+      priority: 200
+      middlewares:
+        - name: www-to-non-www
+      services:
+        - name: backend
+          port: 8000
+  tls:
+    certResolver: leresolver
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: backend-http
+  namespace: querido-diario
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`backend-api.queridodiario.ok.org.br`) || Host(`www.backend-api.queridodiario.ok.org.br`)
+      kind: Rule
+      middlewares:
+        - name: redirect-to-https
+      services:
+        - name: backend
+          port: 8000
