@@ -1,0 +1,36 @@
+---
+# Template para o overlay production-local/ (GITIGNORED).
+# Copie este arquivo para k8s/overlays/production-local/kustomization.yaml
+# e substitua os valores <PLACEHOLDER> antes de fazer o deploy.
+#
+# Este overlay adiciona apenas os valores específicos da infraestrutura
+# de produção que não podem ser versionados (endpoint interno, bucket).
+# Todo o resto (domínio, IngressRoutes, Certificate, StorageClass) está
+# no overlay production/ versionado.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../production
+
+patches:
+  # ── Backup Postgres → endpoint real do Ceph Object Store ──────────────────
+  # Preencher após criar o bucket (ver DEPLOY.md Fase 2).
+  - patch: |-
+      - op: add
+        path: /spec/backup
+        value:
+          barmanObjectStore:
+            destinationPath: "s3://<NOME-DO-BUCKET>/postgres-backup"
+            endpointURL: "https://<ENDPOINT-S3-CEPH>"
+            s3Credentials:
+              accessKeyId:
+                name: postgres-backup-secret
+                key: ACCESS_KEY_ID
+              secretAccessKey:
+                name: postgres-backup-secret
+                key: SECRET_ACCESS_KEY
+          retentionPolicy: "30d"
+    target:
+      kind: Cluster
+      name: postgres

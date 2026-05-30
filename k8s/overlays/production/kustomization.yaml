@@ -4,6 +4,7 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - certificates.yaml
 
 # Defina as imagens com tags fixas para produção (evite :latest)
 images:
@@ -16,9 +17,8 @@ images:
   - name: ghcr.io/okfn-brasil/querido-diario-data-processing/apache-tika
     newTag: "latest"
 
-# Patches de configuração específica de produção
 patches:
-  # Frontend: mais réplicas em produção
+  # ── Réplicas ───────────────────────────────────────────────────────────────
   - patch: |-
       - op: replace
         path: /spec/replicas
@@ -27,7 +27,6 @@ patches:
       kind: Deployment
       name: frontend
 
-  # API: mais réplicas em produção
   - patch: |-
       - op: replace
         path: /spec/replicas
@@ -36,7 +35,6 @@ patches:
       kind: Deployment
       name: api
 
-  # Celery Worker: mais réplicas
   - patch: |-
       - op: replace
         path: /spec/replicas
@@ -45,7 +43,7 @@ patches:
       kind: Deployment
       name: celery-worker
 
-  # ── PostgreSQL via CloudNativePG ────────────────────────────────────────────
+  # ── PostgreSQL via CloudNativePG ───────────────────────────────────────────
   - patch: |-
       - op: replace
         path: /spec/instances
@@ -53,6 +51,9 @@ patches:
       - op: replace
         path: /spec/storage/size
         value: 100Gi
+      - op: add
+        path: /spec/storage/storageClass
+        value: ceph-block-hdd
       - op: replace
         path: /spec/resources/limits/memory
         value: 1Gi
@@ -72,19 +73,177 @@ patches:
       kind: Cluster
       name: postgres
 
+  # ── StorageClass Ceph para volumes persistentes ────────────────────────────
+  - patch: |-
+      - op: add
+        path: /spec/storageClassName
+        value: ceph-block-hdd
+    target:
+      kind: PersistentVolumeClaim
+      name: redis-data
+
+  - patch: |-
+      - op: add
+        path: /spec/storageClassName
+        value: ceph-block-hdd
+    target:
+      kind: PersistentVolumeClaim
+      name: static-files
+
+  # ── ConfigMap: domínio e URLs de produção ─────────────────────────────────
+  # Domínio base: queridodiario.org.br
+  # Para trocar o domínio, alterar todos os valores desta seção e os
+  # IngressRoutes abaixo. Não existe variável única no Kustomize para
+  # interpolação em strings — ver CLAUDE.md para alternativas (Helm).
+  - patch: |-
+      - op: replace
+        path: /data/DOMAIN
+        value: queridodiario.org.br
+      - op: replace
+        path: /data/QD_API_URL
+        value: https://api.queridodiario.org.br
+      - op: replace
+        path: /data/QD_BACKEND_ALLOWED_HOSTS
+        value: "queridodiario.org.br,www.queridodiario.org.br,api.queridodiario.org.br,www.api.queridodiario.org.br,backend-api.queridodiario.org.br,www.backend-api.queridodiario.org.br"
+      - op: replace
+        path: /data/STATIC_URL
+        value: https://backend-api.queridodiario.org.br/api/static/
+      - op: replace
+        path: /data/FRONT_BASE_URL
+        value: https://queridodiario.org.br
+    target:
+      kind: ConfigMap
+      name: app-config
+
+  # ── Frontend: env.js aponta para API de produção ──────────────────────────
+  - patch: |-
+      - op: replace
+        path: /data/env.js
+        value: |
+          (function (window) {
+            window.__env = window.__env || {};
+            window.__env.envFileLoaded = true;
+            window.__env.apiUrl = 'https://api.queridodiario.org.br';
+            window.__env.qdApiSearchResultMaxSize = 10000;
+          }(this));
+    target:
+      kind: ConfigMap
+      name: frontend-env
+
+  # ── IngressRoutes HTTPS ────────────────────────────────────────────────────
+  # tls.secretName em vez de tls.certResolver: o Traefik do Revoada não tem
+  # certresolver ACME configurado; o cert-manager cuida dos certificados.
+  # Os IngressRoutes *-http da base ficam inativos: o haproxy externo já
+  # redireciona HTTP→HTTPS antes de chegar ao Traefik.
+  - patch: |-
+      - op: replace
+        path: /spec
+        value:
+          entryPoints:
+            - websecure
+          routes:
+            - match: "Host(`queridodiario.org.br`)"
+              kind: Rule
+              priority: 10
+              middlewares:
+                - name: security-headers
+                - name: compression
+              services:
+                - name: frontend
+                  port: 80
+            - match: "Host(`www.queridodiario.org.br`)"
+              kind: Rule
+              priority: 200
+              middlewares:
+                - name: www-to-non-www
+              services:
+                - name: frontend
+                  port: 80
+          tls:
+            secretName: queridodiario-tls
+    target:
+      kind: IngressRoute
+      name: frontend
+
+  - patch: |-
+      - op: replace
+        path: /spec
+        value:
+          entryPoints:
+            - websecure
+          routes:
+            - match: "Host(`api.queridodiario.org.br`)"
+              kind: Rule
+              priority: 10
+              middlewares:
+                - name: api-strip-prefix
+                - name: cors-headers
+                - name: api-rate-limit
+                - name: security-headers
+                - name: compression
+              services:
+                - name: api
+                  port: 8080
+            - match: "Host(`www.api.queridodiario.org.br`)"
+              kind: Rule
+              priority: 200
+              middlewares:
+                - name: www-to-non-www
+              services:
+                - name: api
+                  port: 8080
+            - match: "Host(`queridodiario.org.br`) && PathPrefix(`/api`)"
+              kind: Rule
+              priority: 100
+              middlewares:
+                - name: cors-redirect
+                - name: api-redirect
+              services:
+                - name: api
+                  port: 8080
+          tls:
+            secretName: queridodiario-tls
+    target:
+      kind: IngressRoute
+      name: api
+
+  - patch: |-
+      - op: replace
+        path: /spec
+        value:
+          entryPoints:
+            - websecure
+          routes:
+            - match: "Host(`backend-api.queridodiario.org.br`)"
+              kind: Rule
+              middlewares:
+                - name: cors-headers
+                - name: api-rate-limit
+                - name: security-headers
+                - name: compression
+              services:
+                - name: backend
+                  port: 8000
+            - match: "Host(`www.backend-api.queridodiario.org.br`)"
+              kind: Rule
+              priority: 200
+              middlewares:
+                - name: www-to-non-www
+              services:
+                - name: backend
+                  port: 8000
+          tls:
+            secretName: queridodiario-tls
+    target:
+      kind: IngressRoute
+      name: backend
+
 # ── Secrets de produção ────────────────────────────────────────────────────────
 # NÃO versione arquivos com credenciais reais.
 #
-# Crie o secret de credenciais do CNPG:
-#   kubectl create secret generic postgres-credentials \
-#     -n querido-diario \
-#     --from-literal=username='<usuario>' \
-#     --from-literal=password='<senha>'
+# Crie os secrets manualmente (ver k8s/overlays/production-local/DEPLOY.md):
+#   kubectl create secret generic postgres-credentials -n querido-diario ...
+#   kubectl create secret generic postgres-backup-secret -n querido-diario ...
+#   kubectl create secret generic app-secret -n querido-diario ...
 #
-# Crie o secret da aplicação:
-#   kubectl create secret generic app-secret \
-#     -n querido-diario \
-#     --from-literal=QD_BACKEND_SECRET_KEY='...' \
-#     ... (ver k8s/README.md para lista completa)
-#
-# Alternativas: Sealed Secrets ou External Secrets Operator.
+# Alternativas para CI/CD: Sealed Secrets ou External Secrets Operator.

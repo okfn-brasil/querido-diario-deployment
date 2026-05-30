@@ -1,0 +1,23 @@
+---
+# Certificado TLS gerenciado pelo cert-manager.
+# ClusterIssuer "letsencrypt-prod" já está instalado no cluster pelo admin do CCSL.
+# ATENÇÃO: aplicar este recurso SOMENTE após o DNS apontar para o IP correto.
+# O Let's Encrypt valida via HTTP-01; pedir ao admin exceção no haproxy para
+# /.well-known/acme-challenge/ antes do primeiro deploy.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: queridodiario-tls
+  namespace: querido-diario
+spec:
+  secretName: queridodiario-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - queridodiario.org.br
+    - www.queridodiario.org.br
+    - api.queridodiario.org.br
+    - www.api.queridodiario.org.br
+    - backend-api.queridodiario.org.br
+    - www.backend-api.queridodiario.org.br
