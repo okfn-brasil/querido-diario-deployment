@@ -24,5 +24,8 @@ k8s/overlays/*/secret-app.env
 k8s/overlays/*/*.secret.yaml
 k8s/base/secret-app-values.yaml
 
+# Overlay de produção com valores reais (endpoints, credenciais do ambiente)
+k8s/overlays/production-local/
+
 # Arquivos do claude para não serem versionados
 .claude/settings.local.json
