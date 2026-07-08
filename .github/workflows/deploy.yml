@@ -74,7 +74,6 @@ jobs:
       - name: Cria/atualiza secret app-secret
         env:
           QD_BACKEND_SECRET_KEY: ${{ secrets.QD_BACKEND_SECRET_KEY }}
-          QD_BACKEND_DB_URL: ${{ secrets.QD_BACKEND_DB_URL }}
           POSTGRES_USERNAME: ${{ secrets.POSTGRES_USERNAME }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           OPENSEARCH_HOST: ${{ secrets.OPENSEARCH_HOST }}
@@ -87,10 +86,12 @@ jobs:
           MAILJET_SECRET_KEY: ${{ secrets.MAILJET_SECRET_KEY }}
           SUGGESTION_RECIPIENT_EMAIL: ${{ secrets.SUGGESTION_RECIPIENT_EMAIL }}
         run: |
+          # URL interna ao cluster — mais seguro e sem custo de egress
+          DB_URL="postgres://${POSTGRES_USERNAME}:${POSTGRES_PASSWORD}@postgres-rw.${NAMESPACE}:5432/backend"
           kubectl create secret generic app-secret \
             -n "$NAMESPACE" \
             --from-literal=QD_BACKEND_SECRET_KEY="$QD_BACKEND_SECRET_KEY" \
-            --from-literal=QD_BACKEND_DB_URL="$QD_BACKEND_DB_URL" \
+            --from-literal=QD_BACKEND_DB_URL="$DB_URL" \
             --from-literal=QD_DATA_DB_USER="$POSTGRES_USERNAME" \
             --from-literal=QD_DATA_DB_PASSWORD="$POSTGRES_PASSWORD" \
             --from-literal=QD_BACKEND_DB_USER="$POSTGRES_USERNAME" \
