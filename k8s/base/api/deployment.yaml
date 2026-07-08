@@ -88,6 +88,11 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: DEFAULT_FROM_EMAIL
+            - name: QUERIDO_DIARIO_SCRAPER_API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QUERIDO_DIARIO_SCRAPER_API_KEYS
           resources:
             limits:
               memory: 768Mi

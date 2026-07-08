@@ -85,6 +85,7 @@ jobs:
           MAILJET_API_KEY: ${{ secrets.MAILJET_API_KEY }}
           MAILJET_SECRET_KEY: ${{ secrets.MAILJET_SECRET_KEY }}
           SUGGESTION_RECIPIENT_EMAIL: ${{ secrets.SUGGESTION_RECIPIENT_EMAIL }}
+          SCRAPER_API_KEYS: ${{ secrets.SCRAPER_API_KEYS }}
         run: |
           # URL interna ao cluster — mais seguro e sem custo de egress
           DB_URL="postgres://${POSTGRES_USERNAME}:${POSTGRES_PASSWORD}@postgres-rw.${NAMESPACE}:5432/backend"
@@ -107,6 +108,7 @@ jobs:
             --from-literal=MAILJET_API_KEY="$MAILJET_API_KEY" \
             --from-literal=MAILJET_SECRET_KEY="$MAILJET_SECRET_KEY" \
             --from-literal=QUERIDO_DIARIO_SUGGESTION_RECIPIENT_EMAIL="$SUGGESTION_RECIPIENT_EMAIL" \
+            --from-literal=QUERIDO_DIARIO_SCRAPER_API_KEYS="$SCRAPER_API_KEYS" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       # ── Deploy ─────────────────────────────────────────────────────────────
