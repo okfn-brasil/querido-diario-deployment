@@ -50,42 +50,62 @@ jobs:
       # ── Secrets do cluster (idempotente via --dry-run | apply) ─────────────
 
       - name: Cria/atualiza secret postgres-credentials
+        env:
+          POSTGRES_USERNAME: ${{ secrets.POSTGRES_USERNAME }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
           kubectl create secret generic postgres-credentials \
-            -n ${{ env.NAMESPACE }} \
-            --from-literal=username='${{ secrets.POSTGRES_USERNAME }}' \
-            --from-literal=password='${{ secrets.POSTGRES_PASSWORD }}' \
+            -n "$NAMESPACE" \
+            --from-literal=username="$POSTGRES_USERNAME" \
+            --from-literal=password="$POSTGRES_PASSWORD" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Cria/atualiza secret postgres-backup-secret
+        env:
+          POSTGRES_BACKUP_ACCESS_KEY: ${{ secrets.POSTGRES_BACKUP_ACCESS_KEY }}
+          POSTGRES_BACKUP_SECRET_KEY: ${{ secrets.POSTGRES_BACKUP_SECRET_KEY }}
         run: |
           kubectl create secret generic postgres-backup-secret \
-            -n ${{ env.NAMESPACE }} \
-            --from-literal=ACCESS_KEY_ID='${{ secrets.POSTGRES_BACKUP_ACCESS_KEY }}' \
-            --from-literal=SECRET_ACCESS_KEY='${{ secrets.POSTGRES_BACKUP_SECRET_KEY }}' \
+            -n "$NAMESPACE" \
+            --from-literal=ACCESS_KEY_ID="$POSTGRES_BACKUP_ACCESS_KEY" \
+            --from-literal=SECRET_ACCESS_KEY="$POSTGRES_BACKUP_SECRET_KEY" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Cria/atualiza secret app-secret
+        env:
+          QD_BACKEND_SECRET_KEY: ${{ secrets.QD_BACKEND_SECRET_KEY }}
+          QD_BACKEND_DB_URL: ${{ secrets.QD_BACKEND_DB_URL }}
+          POSTGRES_USERNAME: ${{ secrets.POSTGRES_USERNAME }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          OPENSEARCH_HOST: ${{ secrets.OPENSEARCH_HOST }}
+          OPENSEARCH_USER: ${{ secrets.OPENSEARCH_USER }}
+          OPENSEARCH_PASSWORD: ${{ secrets.OPENSEARCH_PASSWORD }}
+          STORAGE_ACCESS_KEY: ${{ secrets.STORAGE_ACCESS_KEY }}
+          STORAGE_ACCESS_SECRET: ${{ secrets.STORAGE_ACCESS_SECRET }}
+          STORAGE_BUCKET: ${{ secrets.STORAGE_BUCKET }}
+          MAILJET_API_KEY: ${{ secrets.MAILJET_API_KEY }}
+          MAILJET_SECRET_KEY: ${{ secrets.MAILJET_SECRET_KEY }}
+          SUGGESTION_RECIPIENT_EMAIL: ${{ secrets.SUGGESTION_RECIPIENT_EMAIL }}
         run: |
           kubectl create secret generic app-secret \
-            -n ${{ env.NAMESPACE }} \
-            --from-literal=QD_BACKEND_SECRET_KEY='${{ secrets.QD_BACKEND_SECRET_KEY }}' \
-            --from-literal=QD_BACKEND_DB_URL='${{ secrets.QD_BACKEND_DB_URL }}' \
-            --from-literal=QD_DATA_DB_USER='${{ secrets.POSTGRES_USERNAME }}' \
-            --from-literal=QD_DATA_DB_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}' \
-            --from-literal=QD_BACKEND_DB_USER='${{ secrets.POSTGRES_USERNAME }}' \
-            --from-literal=QD_BACKEND_DB_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}' \
-            --from-literal=POSTGRES_COMPANIES_USER='${{ secrets.POSTGRES_USERNAME }}' \
-            --from-literal=POSTGRES_COMPANIES_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}' \
-            --from-literal=QUERIDO_DIARIO_OPENSEARCH_HOST='${{ secrets.OPENSEARCH_HOST }}' \
-            --from-literal=QUERIDO_DIARIO_OPENSEARCH_USER='${{ secrets.OPENSEARCH_USER }}' \
-            --from-literal=QUERIDO_DIARIO_OPENSEARCH_PASSWORD='${{ secrets.OPENSEARCH_PASSWORD }}' \
-            --from-literal=STORAGE_ACCESS_KEY='${{ secrets.STORAGE_ACCESS_KEY }}' \
-            --from-literal=STORAGE_ACCESS_SECRET='${{ secrets.STORAGE_ACCESS_SECRET }}' \
-            --from-literal=STORAGE_BUCKET='${{ secrets.STORAGE_BUCKET }}' \
-            --from-literal=MAILJET_API_KEY='${{ secrets.MAILJET_API_KEY }}' \
-            --from-literal=MAILJET_SECRET_KEY='${{ secrets.MAILJET_SECRET_KEY }}' \
-            --from-literal=QUERIDO_DIARIO_SUGGESTION_RECIPIENT_EMAIL='${{ secrets.SUGGESTION_RECIPIENT_EMAIL }}' \
+            -n "$NAMESPACE" \
+            --from-literal=QD_BACKEND_SECRET_KEY="$QD_BACKEND_SECRET_KEY" \
+            --from-literal=QD_BACKEND_DB_URL="$QD_BACKEND_DB_URL" \
+            --from-literal=QD_DATA_DB_USER="$POSTGRES_USERNAME" \
+            --from-literal=QD_DATA_DB_PASSWORD="$POSTGRES_PASSWORD" \
+            --from-literal=QD_BACKEND_DB_USER="$POSTGRES_USERNAME" \
+            --from-literal=QD_BACKEND_DB_PASSWORD="$POSTGRES_PASSWORD" \
+            --from-literal=POSTGRES_COMPANIES_USER="$POSTGRES_USERNAME" \
+            --from-literal=POSTGRES_COMPANIES_PASSWORD="$POSTGRES_PASSWORD" \
+            --from-literal=QUERIDO_DIARIO_OPENSEARCH_HOST="$OPENSEARCH_HOST" \
+            --from-literal=QUERIDO_DIARIO_OPENSEARCH_USER="$OPENSEARCH_USER" \
+            --from-literal=QUERIDO_DIARIO_OPENSEARCH_PASSWORD="$OPENSEARCH_PASSWORD" \
+            --from-literal=STORAGE_ACCESS_KEY="$STORAGE_ACCESS_KEY" \
+            --from-literal=STORAGE_ACCESS_SECRET="$STORAGE_ACCESS_SECRET" \
+            --from-literal=STORAGE_BUCKET="$STORAGE_BUCKET" \
+            --from-literal=MAILJET_API_KEY="$MAILJET_API_KEY" \
+            --from-literal=MAILJET_SECRET_KEY="$MAILJET_SECRET_KEY" \
+            --from-literal=QUERIDO_DIARIO_SUGGESTION_RECIPIENT_EMAIL="$SUGGESTION_RECIPIENT_EMAIL" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       # ── Deploy ─────────────────────────────────────────────────────────────
