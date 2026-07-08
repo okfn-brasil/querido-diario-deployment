@@ -29,3 +29,9 @@ k8s/overlays/production-local/
 
 # Arquivos do claude para não serem versionados
 .claude/settings.local.json
+
+# Scripts e arquivos locais de gerenciamento de secrets (não versionar)
+scripts/secrets.txt
+scripts/load-secrets.sh
+scripts/revoada.conf
+scripts/revoada.yaml

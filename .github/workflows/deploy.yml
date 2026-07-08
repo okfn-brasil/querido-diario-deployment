@@ -1,0 +1,110 @@
+name: Deploy para Revoada
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NAMESPACE: querido-diario
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production  # habilitar "required reviewers" nas configurações do repo
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── VPN ────────────────────────────────────────────────────────────────
+
+      - name: Instala WireGuard
+        run: sudo apt-get install -y wireguard wireguard-tools
+
+      - name: Conecta à VPN Revoada
+        run: |
+          echo "${{ secrets.WIREGUARD_CONFIG }}" | sudo tee /etc/wireguard/wg0.conf > /dev/null
+          sudo chmod 600 /etc/wireguard/wg0.conf
+          sudo wg-quick up wg0
+          sleep 2
+
+      # ── kubectl ────────────────────────────────────────────────────────────
+
+      - name: Configura kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_REVOADA }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl config set-context --current --namespace=${{ env.NAMESPACE }}
+          kubectl get pods -n ${{ env.NAMESPACE }}
+
+      # ── Overlay production-local ───────────────────────────────────────────
+      # O overlay production-local/ é gitignored (contém endpoints internos).
+      # O conteúdo do kustomization.yaml é armazenado como GitHub Secret.
+
+      - name: Prepara overlay production-local
+        run: |
+          mkdir -p k8s/overlays/production-local
+          echo "${{ secrets.KUSTOMIZATION_PROD_LOCAL }}" > k8s/overlays/production-local/kustomization.yaml
+
+      # ── Secrets do cluster (idempotente via --dry-run | apply) ─────────────
+
+      - name: Cria/atualiza secret postgres-credentials
+        run: |
+          kubectl create secret generic postgres-credentials \
+            -n ${{ env.NAMESPACE }} \
+            --from-literal=username='${{ secrets.POSTGRES_USERNAME }}' \
+            --from-literal=password='${{ secrets.POSTGRES_PASSWORD }}' \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Cria/atualiza secret postgres-backup-secret
+        run: |
+          kubectl create secret generic postgres-backup-secret \
+            -n ${{ env.NAMESPACE }} \
+            --from-literal=ACCESS_KEY_ID='${{ secrets.POSTGRES_BACKUP_ACCESS_KEY }}' \
+            --from-literal=SECRET_ACCESS_KEY='${{ secrets.POSTGRES_BACKUP_SECRET_KEY }}' \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Cria/atualiza secret app-secret
+        run: |
+          kubectl create secret generic app-secret \
+            -n ${{ env.NAMESPACE }} \
+            --from-literal=QD_BACKEND_SECRET_KEY='${{ secrets.QD_BACKEND_SECRET_KEY }}' \
+            --from-literal=QD_BACKEND_DB_URL='${{ secrets.QD_BACKEND_DB_URL }}' \
+            --from-literal=QD_DATA_DB_USER='${{ secrets.POSTGRES_USERNAME }}' \
+            --from-literal=QD_DATA_DB_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}' \
+            --from-literal=QD_BACKEND_DB_USER='${{ secrets.POSTGRES_USERNAME }}' \
+            --from-literal=QD_BACKEND_DB_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}' \
+            --from-literal=POSTGRES_COMPANIES_USER='${{ secrets.POSTGRES_USERNAME }}' \
+            --from-literal=POSTGRES_COMPANIES_PASSWORD='${{ secrets.POSTGRES_PASSWORD }}' \
+            --from-literal=QUERIDO_DIARIO_OPENSEARCH_HOST='${{ secrets.OPENSEARCH_HOST }}' \
+            --from-literal=QUERIDO_DIARIO_OPENSEARCH_USER='${{ secrets.OPENSEARCH_USER }}' \
+            --from-literal=QUERIDO_DIARIO_OPENSEARCH_PASSWORD='${{ secrets.OPENSEARCH_PASSWORD }}' \
+            --from-literal=STORAGE_ACCESS_KEY='${{ secrets.STORAGE_ACCESS_KEY }}' \
+            --from-literal=STORAGE_ACCESS_SECRET='${{ secrets.STORAGE_ACCESS_SECRET }}' \
+            --from-literal=STORAGE_BUCKET='${{ secrets.STORAGE_BUCKET }}' \
+            --from-literal=MAILJET_API_KEY='${{ secrets.MAILJET_API_KEY }}' \
+            --from-literal=MAILJET_SECRET_KEY='${{ secrets.MAILJET_SECRET_KEY }}' \
+            --from-literal=QUERIDO_DIARIO_SUGGESTION_RECIPIENT_EMAIL='${{ secrets.SUGGESTION_RECIPIENT_EMAIL }}' \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      # ── Deploy ─────────────────────────────────────────────────────────────
+
+      - name: Diff (o que será aplicado)
+        run: kubectl diff -k k8s/overlays/production-local || true
+
+      - name: Aplica overlay de produção
+        run: kubectl apply -k k8s/overlays/production-local
+
+      - name: Aguarda rollout
+        run: |
+          kubectl rollout status deployment/frontend  -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl rollout status deployment/api       -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl rollout status deployment/backend   -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl rollout status deployment/celery-worker -n ${{ env.NAMESPACE }} --timeout=300s
+
+      # ── VPN cleanup ────────────────────────────────────────────────────────
+
+      - name: Desconecta VPN
+        if: always()
+        run: sudo wg-quick down wg0

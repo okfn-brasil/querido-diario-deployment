@@ -238,12 +238,36 @@ patches:
       kind: IngressRoute
       name: backend
 
-# ── Secrets de produção ────────────────────────────────────────────────────────
-# NÃO versione arquivos com credenciais reais.
-#
-# Crie os secrets manualmente (ver k8s/overlays/production-local/DEPLOY.md):
-#   kubectl create secret generic postgres-credentials -n querido-diario ...
-#   kubectl create secret generic postgres-backup-secret -n querido-diario ...
-#   kubectl create secret generic app-secret -n querido-diario ...
-#
-# Alternativas para CI/CD: Sealed Secrets ou External Secrets Operator.
+  # ── Exclui do output: namespace e templates de secrets ────────────────────────
+  # O namespace já existe (gerenciado pelo admin) e os secrets são gerenciados
+  # pelo CI (via kubectl create secret) ou manualmente. O kustomize não deve
+  # sobrescrever esses recursos com os templates placeholder da base.
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: querido-diario
+    target:
+      kind: Namespace
+      name: querido-diario
+
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: app-secret
+    target:
+      kind: Secret
+      name: app-secret
+
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: postgres-credentials
+    target:
+      kind: Secret
+      name: postgres-credentials
