@@ -9,7 +9,7 @@ resources:
 # Defina as imagens com tags fixas para produção (evite :latest)
 images:
   - name: ghcr.io/okfn-brasil/querido-diario-api
-    newTag: "latest"  # substitua pela tag de release, ex: "v1.2.3"
+    newTag: "v0.22.0"
   - name: ghcr.io/okfn-brasil/querido-diario-backend
     newTag: "latest"
   - name: ghcr.io/okfn-brasil/querido-diario-data-processing
