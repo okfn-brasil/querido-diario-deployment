@@ -13,7 +13,7 @@ Repositório de infraestrutura da plataforma [Querido Diário](https://queridodi
 | Apache Tika | Java | — |
 | Redis | — | — |
 | PostgreSQL | CloudNativePG | — |
-| OpenSearch | Docker Compose (VM) | — |
+| OpenSearch | StatefulSet no cluster k8s (single-node, sem HA) | — |
 | Storage (S3) | Garage (dev) / AWS S3 (prod) | — |
 
 ## Estrutura do repositório
@@ -21,7 +21,6 @@ Repositório de infraestrutura da plataforma [Querido Diário](https://queridodi
 ```
 querido-diario-deployment/
 ├── Makefile                         # Todos os comandos (make help)
-├── docker-compose.opensearch.yml    # OpenSearch em VM de produção
 ├── k8s/                             # Manifestos Kubernetes — ver k8s/README.md
 │   ├── base/                        # Recursos base (compartilhados entre overlays)
 │   ├── overlays/
@@ -71,23 +70,12 @@ make k8s-apply-prod   # aplicar no cluster
 
 ---
 
-## OpenSearch (VM)
+## OpenSearch
 
-Em produção, o OpenSearch roda numa VM separada via Docker Compose:
-
-```bash
-# Pré-requisito no host (uma vez):
-sudo sysctl -w vm.max_map_count=262144
-echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.conf
-
-# Subir:
-OPENSEARCH_PASSWORD=<senha> make deploy-opensearch
-
-# Parar:
-make down-opensearch
-```
-
-O OpenSearch fica acessível apenas localmente (`127.0.0.1:9200`). O cluster k8s acessa via hostname/IP da VM.
+Em dev e produção, o OpenSearch roda como `StatefulSet` single-node dentro do
+próprio cluster k8s (ver [ADR-008](adrs/ADR-008-opensearch-single-node-no-cluster-k8s.md)).
+Não há passo manual — sobe junto com o resto do overlay (`make k8s-local-up` em
+dev, `make k8s-apply-prod` em produção).
 
 ---
 

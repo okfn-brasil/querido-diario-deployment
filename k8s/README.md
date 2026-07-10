@@ -28,10 +28,9 @@ k8s/
 │   └── dev/                     # kind local: infra embutida, limites menores
 │       └── infra/
 │           ├── postgres-credentials-dev.yaml
-│           ├── opensearch.yaml
+│           ├── opensearch.yaml  # StatefulSet single-node (índice criado pelo data-processing)
 │           ├── garage.yaml      # Storage S3-compatível (Garage v2)
-│           ├── garage-webui.yaml
-│           └── init-jobs.yaml
+│           └── garage-webui.yaml
 └── local/
     ├── setup.sh                 # Script idempotente: kind + Traefik + CNPG + overlay dev
     ├── teardown.sh
@@ -50,7 +49,7 @@ k8s/
 | Apache Tika | ✓ | ✓ |
 | Redis | ✓ | ✓ |
 | PostgreSQL (CloudNativePG) | ✓ (1 instância) | ✓ (3 instâncias) |
-| OpenSearch | ✓ | externo |
+| OpenSearch | ✓ | ✓ (single-node, sem HA) |
 | Garage (S3) | ✓ | externo (AWS S3) |
 
 ---
@@ -254,4 +253,6 @@ kubectl logs -n querido-diario -l job-name=data-processing-manual -f
 
 **PostgreSQL:** Gerenciado pelo [CloudNativePG](https://cloudnative-pg.io/). Em prod roda com 3 instâncias (primary + 2 replicas). Os bancos `queridodiario`, `backend` e `companies` são criados automaticamente no primeiro boot via `postInitSQL`.
 
-**OpenSearch e Storage:** Em produção são serviços externos (não provisionados neste repositório). Em dev, o overlay inclui OpenSearch e Garage (S3-compatível) como Deployments locais.
+**OpenSearch:** Em produção roda como `StatefulSet` single-node dentro do cluster k8s, em `k8s/overlays/production/opensearch/` (ver ADR-008). Em dev, o overlay inclui OpenSearch como `Deployment` local (plugin de segurança desabilitado).
+
+**Storage:** Em produção é um serviço externo (AWS S3, não provisionado neste repositório). Em dev, o overlay inclui Garage (S3-compatível) como `Deployment` local.

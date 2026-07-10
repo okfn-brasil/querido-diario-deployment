@@ -38,7 +38,7 @@ Internet → Traefik (IngressRoute CRDs) → Serviços K8s
                                         └── backend (Django, porta 8080)
                                               └── celery-beat / celery-worker → Redis
 PostgreSQL gerenciado pelo CloudNativePG operator
-OpenSearch: container local (dev) | VM externa via Docker Compose (prod, Fase 2)
+OpenSearch: container local (dev) | StatefulSet single-node no cluster k8s (prod)
 Storage S3: Garage local (dev) | AWS S3 ou compatível (prod)
 ```
 
@@ -50,11 +50,12 @@ Todas em `adrs/`. Leia antes de propor mudanças estruturais:
 |---|---|
 | ADR-001 | Kubernetes como plataforma de deploy (migração de Docker Compose) |
 | ADR-002 | PostgreSQL via CloudNativePG operator |
-| ADR-003 | OpenSearch em VM externa em produção (recursos insuficientes no cluster) |
+| ADR-003 | ~~OpenSearch em VM externa em produção~~ — superado pelo ADR-008 |
 | ADR-004 | Traefik v3 com IngressRoute CRDs (Gateway API analisado e descartado) |
 | ADR-005 | Raspadores via Zyte (Scrapy Cloud) em produção; CronJob k8s como alternativa |
 | ADR-006 | Garage como storage S3-compatível em desenvolvimento local |
 | ADR-007 | Terminação SSL: cert-manager + Let's Encrypt (não `tls.certResolver` do Traefik) |
+| ADR-008 | OpenSearch single-node dentro do cluster k8s em produção (StatefulSet, sem HA) |
 
 ---
 
@@ -72,7 +73,7 @@ k8s/
 │   └── data-processing/     # CronJob (roda de hora em hora)
 ├── overlays/
 │   ├── dev/                 # kind local: infra embutida, limites menores, HTTP
-│   │   └── infra/           # Garage, OpenSearch, init-jobs (só dev)
+│   │   └── infra/           # Garage, OpenSearch (só dev)
 │   ├── production/          # Prod: réplicas, limites maiores, imagens fixas
 │   └── production-local/    # GITIGNORED — valores reais (endpoint S3, ClusterIssuer)
 ├── local/
@@ -234,13 +235,12 @@ O código dos raspadores está em `../querido-diario/data_collection/`. Para con
 
 ---
 
-## OpenSearch (produção — Fase 2)
+## OpenSearch
 
-Em produção o OpenSearch roda numa VM separada via Docker Compose:
-
-```bash
-OPENSEARCH_PASSWORD=<senha> make deploy-opensearch
-```
-
-O cluster k8s acessa via `Service` + `EndpointSlice` apontando para o IP da VM.
-Detalhes de configuração em `docker-compose.opensearch.yml`.
+OpenSearch roda como `StatefulSet` single-node dentro do próprio cluster k8s,
+tanto em dev quanto em produção (ver ADR-008):
+`k8s/overlays/dev/infra/opensearch.yaml` e
+`k8s/overlays/production/opensearch/statefulset.yaml`. Em produção o plugin de
+segurança fica habilitado, com a senha do usuário `admin` compartilhada com a
+chave `QUERIDO_DIARIO_OPENSEARCH_PASSWORD` do secret `app-secret`; em dev o
+plugin fica desabilitado para simplificar o dia a dia local.

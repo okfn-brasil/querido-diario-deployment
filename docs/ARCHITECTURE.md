@@ -2,7 +2,7 @@
 
 ## Visão Geral
 
-A plataforma Querido Diário roda em Kubernetes (via Kustomize), com Traefik como ingress controller e CloudNativePG para PostgreSQL. Storage de arquivos e OpenSearch são provisionados externamente em produção; em desenvolvimento local (kind), rodam como Deployments simples dentro do próprio cluster.
+A plataforma Querido Diário roda em Kubernetes (via Kustomize), com Traefik como ingress controller e CloudNativePG para PostgreSQL. Storage de arquivos é provisionado externamente em produção (AWS S3); em desenvolvimento local (kind), roda como Deployment simples dentro do próprio cluster (Garage). OpenSearch roda dentro do cluster k8s em ambos os ambientes (StatefulSet single-node — ver ADR-008).
 
 ## Diagrama de componentes
 
@@ -19,7 +19,7 @@ A plataforma Querido Diário roda em Kubernetes (via Kustomize), com Traefik com
                 │    /   │   \
                 │   /    │    \
            [PostgreSQL] [Redis] [OpenSearch]
-           CloudNativePG        (externo em prod)
+           CloudNativePG        (StatefulSet no cluster)
                 │
            [Storage S3]         ← Garage (dev) / AWS S3 (prod)
                 │
@@ -40,7 +40,7 @@ A plataforma Querido Diário roda em Kubernetes (via Kustomize), com Traefik com
 | Apache Tika | `ghcr.io/okfn-brasil/querido-diario-data-processing/apache-tika` | ✓ | ✓ |
 | Redis | `redis:7` | ✓ | ✓ |
 | PostgreSQL (CloudNativePG) | gerenciado pelo operator | 1 instância | 3 instâncias |
-| OpenSearch | `opensearchproject/opensearch` | ✓ (Deployment) | externo |
+| OpenSearch | `opensearchproject/opensearch` | ✓ (StatefulSet) | ✓ (StatefulSet, sem HA) |
 | Garage (S3-compatível) | `dxflrs/garage` | ✓ (Deployment) | externo (AWS S3) |
 | Data Processing | `ghcr.io/okfn-brasil/querido-diario-data-processing` | CronJob suspenso | CronJob k8s ativo |
 | Raspadores (Scrapy) | — (Zyte gerencia) | `make run-spider` (local) | Zyte (Scrapy Cloud) |
@@ -68,8 +68,7 @@ k8s/
 │       └── infra/
 │           ├── opensearch.yaml
 │           ├── garage.yaml
-│           ├── garage-webui.yaml
-│           └── init-jobs.yaml
+│           └── garage-webui.yaml
 └── local/              # scripts para cluster kind local
     ├── setup.sh        # idempotente: kind + Traefik + CNPG operator + overlay dev
     └── teardown.sh
