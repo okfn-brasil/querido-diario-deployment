@@ -11,7 +11,7 @@ resources:
 # Defina as imagens com tags fixas para produção (evite :latest)
 images:
   - name: ghcr.io/okfn-brasil/querido-diario-api
-    newTag: "v0.22.4"
+    newTag: "v0.22.5"
   - name: ghcr.io/okfn-brasil/querido-diario-backend
     newTag: "latest"
   - name: ghcr.io/okfn-brasil/querido-diario-data-processing
