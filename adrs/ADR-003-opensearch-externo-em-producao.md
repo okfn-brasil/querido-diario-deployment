@@ -1,7 +1,7 @@
 # ADR-003: OpenSearch externo em produção, Docker Compose em VM
 
 **Data:** 2026-05-22
-**Status:** Decidido
+**Status:** Superado por [ADR-008](./ADR-008-opensearch-single-node-no-cluster-k8s.md) — a VM nunca chegou a ser provisionada
 
 ## Contexto
 

@@ -1,0 +1,113 @@
+---
+# OpenSearch em produção: single-node dentro do cluster k8s (Revoada).
+# Substitui a VM externa via Docker Compose (ver ADR-008, que supera o ADR-003).
+#
+# Requisitos:
+#   - vm.max_map_count >= 262144 no node onde o pod roda. Garantido abaixo pelo
+#     initContainer privileged. Se o cluster negar containers privileged
+#     (Pod Security Admission), a alternativa é pedir ao CCSL para configurar
+#     `vm.max_map_count=262144` permanentemente nos nodes (/etc/sysctl.conf) e
+#     remover o initContainer abaixo.
+#   - Secret "app-secret" com a chave QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+#     preenchida — é reaproveitada aqui como senha do usuário admin do
+#     OpenSearch, evitando manter a senha em dois lugares.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: opensearch
+  namespace: querido-diario
+spec:
+  serviceName: opensearch
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opensearch
+  template:
+    metadata:
+      labels:
+        app: opensearch
+    spec:
+      initContainers:
+        # OpenSearch requer vm.max_map_count >= 262144 no host.
+        # Fallback caso privileged seja bloqueado: configurar no node via CCSL
+        # e remover este initContainer.
+        - name: sysctl
+          image: busybox
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          securityContext:
+            privileged: true
+      containers:
+        - name: opensearch
+          image: opensearchproject/opensearch:2.19.1
+          ports:
+            - containerPort: 9200
+              name: http
+            - containerPort: 9300
+              name: transport
+          env:
+            - name: discovery.type
+              value: single-node
+            - name: OPENSEARCH_JAVA_OPTS
+              value: "-Xms1g -Xmx1g"
+            - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+          resources:
+            limits:
+              memory: 2500Mi
+              cpu: "1"
+            requests:
+              memory: 1500Mi
+              cpu: "250m"
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - >-
+                  curl -sk -u "admin:$OPENSEARCH_INITIAL_ADMIN_PASSWORD"
+                  https://localhost:9200/_cluster/health
+                  | grep -qv '"status":"red"'
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - >-
+                  curl -sk -u "admin:$OPENSEARCH_INITIAL_ADMIN_PASSWORD"
+                  https://localhost:9200/_cluster/health
+                  | grep -qv '"status":"red"'
+            initialDelaySeconds: 45
+            periodSeconds: 10
+            timeoutSeconds: 10
+          volumeMounts:
+            - name: opensearch-data
+              mountPath: /usr/share/opensearch/data
+  volumeClaimTemplates:
+    - metadata:
+        name: opensearch-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: ceph-block-hdd
+        resources:
+          requests:
+            storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opensearch
+  namespace: querido-diario
+spec:
+  selector:
+    app: opensearch
+  ports:
+    - port: 9200
+      targetPort: 9200
+      name: http
