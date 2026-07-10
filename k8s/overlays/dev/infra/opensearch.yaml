@@ -1,22 +1,15 @@
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: opensearch-data
-  namespace: querido-diario
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
----
+# OpenSearch em dev: mesma forma (StatefulSet) usada em produção
+# (k8s/overlays/production/opensearch/statefulset.yaml — ver ADR-008), mas com
+# plugin de segurança desabilitado e recursos menores para facilitar o dia a dia
+# local.
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: opensearch
   namespace: querido-diario
 spec:
+  serviceName: opensearch
   replicas: 1
   selector:
     matchLabels:
@@ -35,9 +28,10 @@ spec:
             privileged: true
       containers:
         - name: opensearch
-          image: opensearchproject/opensearch:2.9.0
+          image: opensearchproject/opensearch:2.19.1
           ports:
             - containerPort: 9200
+              name: http
           env:
             - name: discovery.type
               value: single-node
@@ -67,10 +61,15 @@ spec:
           volumeMounts:
             - name: opensearch-data
               mountPath: /usr/share/opensearch/data
-      volumes:
-        - name: opensearch-data
-          persistentVolumeClaim:
-            claimName: opensearch-data
+  volumeClaimTemplates:
+    - metadata:
+        name: opensearch-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
 ---
 apiVersion: v1
 kind: Service
@@ -83,3 +82,4 @@ spec:
   ports:
     - port: 9200
       targetPort: 9200
+      name: http
