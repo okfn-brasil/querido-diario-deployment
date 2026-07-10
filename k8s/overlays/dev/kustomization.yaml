@@ -8,7 +8,6 @@ resources:
   - infra/opensearch.yaml
   - infra/garage.yaml
   - infra/garage-webui.yaml
-  - infra/init-jobs.yaml
   # IngressRoutes HTTP para *.queridodiario.local
   - ingressroutes-dev.yaml
 

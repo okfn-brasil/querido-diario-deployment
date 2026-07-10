@@ -239,18 +239,14 @@ log "Aguardando PostgreSQL (CloudNativePG)..."
 kubectl wait cluster/postgres -n "$NAMESPACE" --for=condition=Ready --timeout=300s
 
 log "Aguardando infra (garage, opensearch)..."
-kubectl rollout status deployment/garage     -n "$NAMESPACE" --timeout=120s
-# OpenSearch inicializa JVM + índices, pode demorar >2min mesmo com imagem local
-kubectl rollout status deployment/opensearch -n "$NAMESPACE" --timeout=300s
+kubectl rollout status deployment/garage      -n "$NAMESPACE" --timeout=120s
+# OpenSearch inicializa JVM, pode demorar >2min mesmo com imagem local
+# (o índice em si é criado pelo data-processing na primeira execução, não aqui)
+kubectl rollout status statefulset/opensearch -n "$NAMESPACE" --timeout=300s
 
 log "Aguardando serviços de aplicação..."
 kubectl rollout status deployment/redis        -n "$NAMESPACE" --timeout=120s
 kubectl rollout status deployment/apache-tika  -n "$NAMESPACE" --timeout=300s
-
-log "Aguardando job de inicialização do OpenSearch..."
-# Garage não precisa de job: bucket e key são criados via --single-node --default-bucket
-kubectl wait job/opensearch-init -n "$NAMESPACE" --for=condition=complete --timeout=60s 2>/dev/null || \
-    warn "Job opensearch-init não concluiu em 60s (pode já ter rodado antes)"
 
 # ─── 11. /etc/hosts ──────────────────────────────────────────────────────────
 

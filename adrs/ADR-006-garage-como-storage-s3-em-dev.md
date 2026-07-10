@@ -36,4 +36,4 @@ secret.
 
 - Credenciais de acesso ao Garage em dev são fixas e não-sensíveis (definidas no overlay dev).
 - A API S3 do Garage cobre os casos de uso do projeto (PUT, GET, list), mas pode divergir em comportamentos de borda da AWS S3.
-- Ao subir o cluster local, um Job de inicialização (`init-jobs.yaml`) cria o bucket e aplica a configuração inicial do Garage.
+- Bucket e key são criados automaticamente pelo próprio Garage na inicialização (flags `--single-node --default-bucket`), sem necessidade de Job de inicialização separado.
