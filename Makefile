@@ -2,7 +2,6 @@
 # ===================================
 
 .PHONY: help \
-        deploy-opensearch down-opensearch \
         build-api build-backend \
         build-data-processing-base build-data-processing build-tika \
         build-frontend build-all \
@@ -23,8 +22,6 @@ FRONTEND_DIR         ?= ../querido-diario-frontend
 
 FRONTEND_IMAGE       = $(REGISTRY)/querido-diario-frontend
 
-COMPOSE_OPENSEARCH = docker compose -f docker-compose.opensearch.yml
-
 help: ## Mostra esta mensagem de ajuda
 	@echo "Comandos disponíveis:"
 	@echo ""
@@ -33,7 +30,6 @@ help: ## Mostra esta mensagem de ajuda
 	@echo "Inicio rapido:"
 	@echo "  Kubernetes (local) : make k8s-local-up"
 	@echo "  Kubernetes (prod)  : make k8s-apply-prod"
-	@echo "  OpenSearch (VM)    : make deploy-opensearch"
 	@echo ""
 	@echo "Kubernetes local (kind):"
 	@echo "  make k8s-local-up                          # cria cluster kind + sobe ambiente dev"
@@ -75,14 +71,6 @@ help: ## Mostra esta mensagem de ajuda
 	@echo "  SPIDER=<nome>                nome do spider a executar"
 	@echo "  START=YYYY-MM-DD             data de inicio do raspador (opcional)"
 	@echo "  END=YYYY-MM-DD               data de fim do raspador (opcional)"
-
-# --- OpenSearch (VM de produção) ---
-
-deploy-opensearch: ## Sobe o OpenSearch na VM de produção
-	$(COMPOSE_OPENSEARCH) up -d
-
-down-opensearch: ## Para o OpenSearch
-	$(COMPOSE_OPENSEARCH) down
 
 # --- Raspadores (execução local, produção permanece na Zyte) ---
 

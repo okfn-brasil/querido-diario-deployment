@@ -17,8 +17,9 @@ do ambiente.
 ## Decisão
 
 Migrar completamente para **Kubernetes via Kustomize**. Docker Compose é
-removido do repositório, com exceção de `docker-compose.opensearch.yml` para o
-OpenSearch em VM (ver ADR-003).
+removido do repositório (o OpenSearch chegou a ter uma fase intermediária em
+VM via `docker-compose.opensearch.yml`, ver ADR-003 — superado pelo ADR-008
+antes mesmo dessa VM ser criada).
 
 Estrutura adotada:
 
