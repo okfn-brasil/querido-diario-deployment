@@ -221,13 +221,32 @@ def _preload_traefik_image() -> None:
         pc.info(f"Pré-carga da imagem do Traefik pulada ({e}).")
 
 
+def _docker_platform() -> str:
+    return f"linux/{pc.arch_name()}"
+
+
+def _kind_load(image: str) -> tuple[bool, str]:
+    """Tenta `kind load docker-image`. Retorna (sucesso, stderr)."""
+    result = pc.run(
+        ["kind", "load", "docker-image", image, "--name", CLUSTER_NAME],
+        check=False,
+        stdout=pc.subprocess.PIPE,
+        stderr=pc.subprocess.STDOUT,
+        text=True,
+    )
+    output = result.stdout or ""
+    print(output, end="")
+    return result.returncode == 0, output
+
+
 def _preload_image(image: str) -> None:
     """Baixa `image` no host (se necessário) e carrega no nó kind (best-effort)."""
     node = f"{CLUSTER_NAME}-control-plane"
+    platform = _docker_platform()
 
     if not pc.run_ok(["docker", "image", "inspect", image]):
         pc.log(f"Baixando {image}...")
-        if not pc.run_ok(["docker", "pull", image]):
+        if not pc.run_ok(["docker", "pull", "--platform", platform, image]):
             pc.warn(f"Pull de {image} falhou, continuando.")
             return
 
@@ -240,7 +259,32 @@ def _preload_image(image: str) -> None:
             return
 
     pc.log(f"Carregando {image} no nó kind...")
-    pc.run(["kind", "load", "docker-image", image, "--name", CLUSTER_NAME], check=False)
+    ok, output = _kind_load(image)
+    if ok:
+        return
+
+    # Bug conhecido do kind + Docker Desktop com "containerd image store"
+    # habilitado: `docker pull` sem --platform guarda a manifest-list
+    # completa (referências a TODAS as plataformas), mas só baixa os blobs
+    # da plataforma local. `kind load` usa `ctr images import
+    # --all-platforms` e falha tentando importar blobs que nunca foram
+    # baixados ("content digest ... not found"). Recuperação: descarta a
+    # imagem em cache e repuxa já fixando --platform, o que evita o
+    # problema para imagens baixadas de novo.
+    if "content digest" in output and "not found" in output:
+        pc.warn(f"{image}: falha conhecida do kind com manifest multi-plataforma. Tentando recuperar...")
+        pc.run(["docker", "image", "rm", "-f", image], check=False)
+        if pc.run_ok(["docker", "pull", "--platform", platform, image]):
+            ok, output = _kind_load(image)
+
+    if not ok:
+        pc.warn(
+            f"Não foi possível carregar {image} no nó kind — os pods vão tentar puxar "
+            "a imagem diretamente da internet (mais lento, mas não bloqueia o setup).\n"
+            "  Se o erro for \"content digest ... not found\", desabilite em Docker "
+            "Desktop: Settings > General > \"Use containerd for pulling and storing "
+            "images\" (reinicie o Docker Desktop depois) — esse é o problema mais comum."
+        )
 
 
 def preload_dev_infra_images() -> None:

@@ -136,6 +136,24 @@ make k8s-local-data-processing   # executa data-processing manualmente
 make k8s-local-down              # destroi o cluster
 ```
 
+### Troubleshooting
+
+**`ctr: content digest sha256:... not found` ao carregar imagens no kind (Mac/Windows)**
+
+Bug conhecido do `kind` com o Docker Desktop quando a opção **"Use containerd for
+pulling and storing images"** está habilitada (Settings > General). Com ela ativa,
+um `docker pull` sem `--platform` explícito guarda a manifest-list completa
+(referências a *todas* as plataformas de uma imagem multi-arch), mas só baixa os
+blobs da plataforma local. O `kind load docker-image` usa
+`ctr images import --all-platforms` e falha tentando importar blobs que nunca
+foram baixados.
+
+`scripts/k8s_local_up.py` já tenta se recuperar sozinho (descarta a imagem em
+cache local e repuxa fixando `--platform`) e não trava o `make k8s-local-up` por
+causa disso — os pods conseguem puxar a imagem diretamente da internet como
+fallback, só um pouco mais lento. Se o aviso persistir, desabilite a opção acima
+em Docker Desktop e reinicie o Docker.
+
 ---
 
 ## Deploy de produção
