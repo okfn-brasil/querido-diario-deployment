@@ -22,6 +22,13 @@ import pycommon as pc  # noqa: E402
 
 DEFAULT_QD_DIR = pc.REPO_ROOT.parent / "querido-diario"
 
+# requirements.txt pina versões antigas (ex: lxml==4.9.3) sem wheel pra
+# versões recentes do Python (3.13+) — força build a partir do source, que
+# exige headers de sistema (libxml2-dev/libxslt-dev). Preferimos criar o
+# venv com uma versão de Python mais antiga (via pyenv, se disponível) pra
+# evitar isso.
+COMPATIBLE_PYTHON_VERSIONS = ["3.10", "3.11", "3.12"]
+
 
 def data_collection_dir(qd_dir: Path) -> Path:
     return qd_dir / "data_collection"
@@ -44,14 +51,14 @@ def venv_scrapy(qd_dir: Path) -> Path:
     return venv_bin(qd_dir) / pc.exe("scrapy")
 
 
-def cmd_setup(args: argparse.Namespace) -> None:
-    qd_dir = args.qd_dir
+def setup_venv(qd_dir: Path) -> None:
     dc_dir = data_collection_dir(qd_dir)
     requirements = dc_dir / "requirements.txt"
     if not requirements.exists():
         pc.err(f"requirements.txt não encontrado em {requirements} — confira QD_DIR.")
 
-    python_bin = pc.which("python3") or pc.which("python") or sys.executable
+    python_bin = pc.find_python(COMPATIBLE_PYTHON_VERSIONS)
+    pc.info(f"Usando interpretador: {python_bin}")
     pc.log(f"Criando venv em {venv_dir(qd_dir)}...")
     pc.run([python_bin, "-m", "venv", str(venv_dir(qd_dir))])
 
@@ -59,6 +66,10 @@ def cmd_setup(args: argparse.Namespace) -> None:
     pc.run([str(pip), "install", "--upgrade", "pip"])
     pc.run([str(pip), "install", "-r", str(requirements)])
     pc.log("Ambiente dos raspadores pronto.")
+
+
+def cmd_setup(args: argparse.Namespace) -> None:
+    setup_venv(args.qd_dir)
 
 
 def _require_venv(qd_dir: Path) -> Path:
