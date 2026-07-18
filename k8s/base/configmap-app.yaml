@@ -9,9 +9,9 @@ data:
   DOMAIN: "queridodiario.ok.org.br"
 
   # API
-  API_LOG_LEVEL: "INFO"
-  GUNICORN_WORKERS: "4"
-  GUNICORN_WORKER_CLASS: "sync"
+  # LOG_LEVEL alimenta uvicorn.run(log_level=...) em main/__main__.py da API
+  # (roda direto via uvicorn, não usa gunicorn).
+  LOG_LEVEL: "info"
   QUERIDO_DIARIO_OPENSEARCH_INDEX: "queridodiario"
   GAZETTE_OPENSEARCH_INDEX: "queridodiario"
   # Precisam bater com os bancos criados pelo bootstrap do CNPG
