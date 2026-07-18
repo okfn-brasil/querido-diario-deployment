@@ -63,6 +63,9 @@ patches:
         path: /data/QD_BACKEND_DEBUG
         value: "True"
       - op: replace
+        path: /data/LOG_LEVEL
+        value: debug
+      - op: replace
         path: /data/QD_BACKEND_ALLOWED_HOSTS
         value: "*"
       - op: replace
