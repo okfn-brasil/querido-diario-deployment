@@ -38,11 +38,11 @@ spec:
             # A partir da 2.12 o entrypoint do container exige
             # OPENSEARCH_INITIAL_ADMIN_PASSWORD e recusa subir sem ela, a
             # menos que DISABLE_SECURITY_PLUGIN=true seja setada — é essa
-            # flag (não plugins.security.disabled, que é só a config Java
-            # lida depois que o processo já subiu) que o entrypoint checa.
+            # flag (não plugins.security.disabled, que é só a config Java)
+            # que o entrypoint checa. O entrypoint já injeta
+            # plugins.security.disabled=true sozinho quando isso é setado;
+            # declarar as duas causa "setting already set" no boot.
             - name: DISABLE_SECURITY_PLUGIN
-              value: "true"
-            - name: plugins.security.disabled
               value: "true"
             - name: OPENSEARCH_JAVA_OPTS
               value: "-Xms512m -Xmx512m"
