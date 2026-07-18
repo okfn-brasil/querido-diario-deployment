@@ -237,7 +237,7 @@ Em produção os raspadores rodam na **Zyte (Scrapy Cloud)**. Para testes locais
 ```bash
 make spider-setup                                     # cria venv (uma vez)
 make spider-list                                      # lista spiders disponíveis
-make run-spider SPIDER=sp_campinas START=2025-01-01   # executa um spider
+make run-spider SPIDER=sp_sao_bernardo_do_campo START=2025-01-01   # executa um spider
 ```
 
 O código dos raspadores está em `../querido-diario/data_collection/`. `make run-spider` conecta automaticamente ao Postgres e ao Garage (S3) do cluster kind local (port-forward + credenciais do secret `app-secret`) — não precisa de `.local.env` pra esse caso. Crie `../querido-diario/data_collection/.local.env` só se quiser apontar pra outro ambiente (ex: Revoada); o que estiver lá tem prioridade sobre a auto-conexão.
