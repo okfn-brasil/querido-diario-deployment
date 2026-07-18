@@ -64,6 +64,14 @@ def setup_venv(qd_dir: Path) -> None:
 
     pip = venv_bin(qd_dir) / pc.exe("pip")
     pc.run([str(pip), "install", "--upgrade", "pip"])
+    # requirements.txt usa --hash (modo --require-hashes do pip), mas não
+    # pina setuptools — é dependência transitiva implícita do Scrapy. Numa
+    # venv nova, o setuptools do ensurepip às vezes já satisfaz isso sem
+    # baixar nada; em outras (varia por patch do Python/pip instalados),
+    # o pip tenta buscar uma versão nova, sem hash, e o --require-hashes
+    # rejeita com "must have their versions pinned with ==". Pinamos aqui
+    # pra tornar o resultado determinístico entre máquinas.
+    pc.run([str(pip), "install", "setuptools==79.0.1"])
     pc.run([str(pip), "install", "-r", str(requirements)])
     pc.log("Ambiente dos raspadores pronto.")
 
