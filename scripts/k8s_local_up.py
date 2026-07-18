@@ -7,6 +7,7 @@ em Linux, macOS e Windows, sem depender de bash/grep/awk/ss/netstat.
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 import time
@@ -15,10 +16,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pycommon as pc  # noqa: E402
 import k8s_local_data_processing as dp  # noqa: E402
+import spider  # noqa: E402
 
 CLUSTER_NAME = "querido-diario-dev"
 NAMESPACE = "querido-diario"
 GAZETTES_INDEX = "queridodiario"
+GAZETTES_DB = "queridodiario"
+QD_DIR = Path(os.environ.get("QD_DIR", pc.REPO_ROOT.parent / "querido-diario")).resolve()
 
 REPO_ROOT = pc.REPO_ROOT
 K8S_DIR = REPO_ROOT / "k8s"
@@ -343,6 +347,56 @@ def bootstrap_opensearch_index() -> None:
     )
 
 
+# ─── Bootstrap do schema do Postgres (territories/gazettes/spiders) ────────
+#
+# As tabelas territories/gazettes/querido_diario_spiders/territory_spider_map
+# não são geridas por Django nem criadas por nada dentro do cluster — quem
+# cria (SQLAlchemy create_all) e popula (territories.csv + lista de spiders)
+# é o próprio repo de raspadores, via `scrapy qd-sync-spiders`
+# (ver ../querido-diario/data_collection/gazette/database/models.py e
+# gazette/commands/qd-sync-spiders.py). Sem isso, a API e o data-processing
+# não têm schema pra consultar. Esse passo é opcional: se o repo irmão
+# ../querido-diario não estiver clonado, avisamos e seguimos em frente sem
+# travar o k8s-local-up.
+
+POSTGRES_SVC = "postgres-rw"
+POSTGRES_FORWARD_PORT = 5433
+
+
+def bootstrap_postgres_schema() -> None:
+    dc_dir = spider.data_collection_dir(QD_DIR)
+    if not dc_dir.exists():
+        pc.info(
+            f"Repositório de raspadores não encontrado em {QD_DIR} — pulando "
+            "bootstrap do schema do Postgres (territories/gazettes/spiders)."
+        )
+        return
+
+    pc.log("Sincronizando schema/territórios/spiders no Postgres (scrapy qd-sync-spiders)...")
+    try:
+        if not spider.venv_scrapy(QD_DIR).exists():
+            pc.log("venv dos raspadores não encontrado — criando (make spider-setup)...")
+            spider.setup_venv(QD_DIR)
+
+        user = pc.get_secret_value("app-secret", "QD_DATA_DB_USER", NAMESPACE)
+        password = pc.get_secret_value("app-secret", "QD_DATA_DB_PASSWORD", NAMESPACE)
+        if not user or not password:
+            pc.warn("Não consegui ler QD_DATA_DB_USER/QD_DATA_DB_PASSWORD do secret app-secret — pulando.")
+            return
+
+        with pc.PortForward(POSTGRES_SVC, POSTGRES_FORWARD_PORT, 5432, NAMESPACE):
+            env = dict(os.environ)
+            env.pop("QUERIDODIARIO_API_URL", None)  # força o caminho direto via banco
+            env["QUERIDODIARIO_DATABASE_URL"] = (
+                f"postgresql://{user}:{password}@localhost:{POSTGRES_FORWARD_PORT}/{GAZETTES_DB}"
+            )
+            pc.run([str(spider.venv_scrapy(QD_DIR)), "qd-sync-spiders"], cwd=str(dc_dir), env=env)
+
+        pc.info("Schema/territórios/spiders sincronizados no Postgres.")
+    except Exception as e:  # best-effort — não deve travar o k8s-local-up
+        pc.warn(f"Falha ao sincronizar schema do Postgres, siga manualmente depois: {e}")
+
+
 # ─── 11. hosts file ──────────────────────────────────────────────────────────
 
 def check_hosts_file() -> None:
@@ -376,6 +430,7 @@ def main() -> None:
     apply_dev_overlay()
     wait_for_infra()
     bootstrap_opensearch_index()
+    bootstrap_postgres_schema()
     check_hosts_file()
 
     print()

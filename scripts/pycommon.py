@@ -117,6 +117,39 @@ def which(name: str) -> str | None:
     return shutil.which(name)
 
 
+def find_python(preferred_versions: Sequence[str], fallback: bool = True) -> str:
+    """Procura um interpretador Python numa lista de versões preferidas
+    (ex: ["3.10", "3.11", "3.12"], na ordem de preferência), útil quando um
+    projeto irmão tem dependências antigas sem wheel pra versão atual do
+    `python3` do PATH (comum com pacotes C como lxml em versões pinadas).
+
+    Procura primeiro versões instaladas via pyenv (~/.pyenv/versions/X.Y.Z/
+    bin/python3), depois um binário `pythonX.Y` direto no PATH. Se nada bater
+    e fallback=True, retorna o `python3`/`python` padrão do PATH.
+    """
+    pyenv_root = Path(os.environ.get("PYENV_ROOT", Path.home() / ".pyenv"))
+    pyenv_versions_dir = pyenv_root / "versions"
+
+    for version in preferred_versions:
+        if pyenv_versions_dir.is_dir():
+            candidates = sorted(
+                (d for d in pyenv_versions_dir.iterdir() if d.is_dir() and d.name.startswith(f"{version}.")),
+                reverse=True,
+            )
+            for candidate_dir in candidates:
+                python_bin = candidate_dir / "bin" / exe("python3")
+                if python_bin.exists():
+                    return str(python_bin)
+
+        direct = which(f"python{version}")
+        if direct:
+            return direct
+
+    if fallback:
+        return which("python3") or which("python") or sys.executable
+    err(f"Nenhum Python encontrado entre as versões preferidas: {', '.join(preferred_versions)}")
+
+
 def ensure_path_has(directory: Path) -> None:
     """Garante que `directory` esteja no PATH do processo atual (e filhos)."""
     directory_str = str(directory)
@@ -334,6 +367,73 @@ def port_in_use(port: int, host: str = "127.0.0.1") -> bool | None:
                 return None
             return True
         return False
+
+
+def get_secret_value(secret: str, key: str, namespace: str) -> str | None:
+    """Lê e decodifica (base64) uma chave de um Secret do k8s."""
+    import base64
+
+    encoded = capture(
+        ["kubectl", "get", "secret", secret, "-n", namespace, "-o", f"jsonpath={{.data.{key}}}"]
+    )
+    if not encoded:
+        return None
+    try:
+        return base64.b64decode(encoded).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def wait_for_port(port: int, host: str = "127.0.0.1", timeout: float = 20.0) -> bool:
+    """Tenta conectar em host:port repetidamente até timeout. Retorna True se conectou."""
+    import time as _time
+
+    deadline = _time.time() + timeout
+    while _time.time() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1.0)
+            try:
+                s.connect((host, port))
+                return True
+            except OSError:
+                _time.sleep(0.5)
+    return False
+
+
+class PortForward:
+    """Context manager: abre `kubectl port-forward` em background e garante
+    que o processo seja encerrado ao sair do bloco `with`, mesmo em erro."""
+
+    def __init__(self, service: str, local_port: int, remote_port: int, namespace: str):
+        self.service = service
+        self.local_port = local_port
+        self.remote_port = remote_port
+        self.namespace = namespace
+        self._proc: subprocess.Popen | None = None
+
+    def __enter__(self) -> "PortForward":
+        self._proc = subprocess.Popen(
+            [
+                "kubectl", "port-forward",
+                f"svc/{self.service}", f"{self.local_port}:{self.remote_port}",
+                "-n", self.namespace,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if not wait_for_port(self.local_port):
+            self.__exit__(None, None, None)
+            err(f"Não foi possível abrir port-forward para svc/{self.service}:{self.remote_port}.")
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        if self._proc is not None:
+            self._proc.terminate()
+            try:
+                self._proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._proc.kill()
+            self._proc = None
 
 
 def path_hint() -> str:
