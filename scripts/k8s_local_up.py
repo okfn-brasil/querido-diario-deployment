@@ -222,6 +222,14 @@ def _preload_traefik_image() -> None:
 
 
 def _docker_platform() -> str:
+    """Plataforma alvo pro `docker pull --platform`.
+
+    "linux/" é sempre correto aqui independente do SO do host (Linux, Mac ou
+    Windows): esse valor descreve o SO da IMAGEM/container, não do host. No
+    Mac e Windows o Docker Desktop sempre roda containers dentro de uma VM
+    Linux (check_docker() já garante isso ao exigir OSType=linux) — kind só
+    roda nós Linux. Só a arquitetura varia por host (amd64/arm64).
+    """
     return f"linux/{pc.arch_name()}"
 
 
