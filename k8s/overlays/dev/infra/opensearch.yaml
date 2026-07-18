@@ -35,6 +35,13 @@ spec:
           env:
             - name: discovery.type
               value: single-node
+            # A partir da 2.12 o entrypoint do container exige
+            # OPENSEARCH_INITIAL_ADMIN_PASSWORD e recusa subir sem ela, a
+            # menos que DISABLE_SECURITY_PLUGIN=true seja setada — é essa
+            # flag (não plugins.security.disabled, que é só a config Java
+            # lida depois que o processo já subiu) que o entrypoint checa.
+            - name: DISABLE_SECURITY_PLUGIN
+              value: "true"
             - name: plugins.security.disabled
               value: "true"
             - name: OPENSEARCH_JAVA_OPTS

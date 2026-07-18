@@ -33,7 +33,7 @@ CNPG_RELEASE = "1.24"
 DEV_INFRA_IMAGES = [
     "ghcr.io/cloudnative-pg/postgresql:15",
     "ghcr.io/cloudnative-pg/cloudnative-pg:1.24.0",
-    "opensearchproject/opensearch:2.9.0",
+    "opensearchproject/opensearch:2.19.1",
     "dxflrs/garage:v2.3.0",
     "khairul169/garage-webui:latest",
     "curlimages/curl:latest",
