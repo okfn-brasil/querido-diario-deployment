@@ -69,10 +69,14 @@ k8s/
 │           ├── opensearch.yaml
 │           ├── garage.yaml
 │           └── garage-webui.yaml
-└── local/              # scripts para cluster kind local
-    ├── setup.sh        # idempotente: kind + Traefik + CNPG operator + overlay dev
-    └── teardown.sh
+└── local/              # config do cluster kind local
+    ├── kind-config.yaml
+    └── traefik-values.yaml
 ```
+
+Os scripts que orquestram o cluster local (`scripts/k8s_local_up.py`, idempotente: kind +
+Traefik + CNPG operator + overlay dev; `scripts/k8s_local_down.py`) ficam em `scripts/` na
+raiz do repositório e rodam em Linux, macOS e Windows.
 
 ## Fluxo de configuração
 
@@ -80,7 +84,7 @@ k8s/
 
 ```bash
 make k8s-local-up       # cria cluster + aplica overlay dev (~10min no 1o run)
-make k8s-local-hosts    # adiciona entradas ao /etc/hosts (requer sudo)
+make k8s-local-hosts    # adiciona entradas ao hosts file (Linux/Mac: sudo; Windows: terminal como Administrador)
 ```
 
 Configuração não-sensível em `k8s/base/configmap-app.yaml`. Credenciais aplicadas pelo overlay dev via arquivos de template em `k8s/overlays/dev/`.

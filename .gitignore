@@ -32,6 +32,15 @@ k8s/overlays/production-local/
 
 # Scripts e arquivos locais de gerenciamento de secrets (não versionar)
 scripts/secrets.txt
-scripts/load-secrets.sh
+scripts/load_secrets.py
 scripts/revoada.conf
 scripts/revoada.yaml
+scripts/okbr.yaml
+
+# Dumps de migração de banco (dados reais de produção, nunca versionar)
+scripts/db-migration/dumps/
+scripts/db-migration/.opensearch-migrate-checkpoint
+
+# Bytecode cache dos scripts Python de automação
+__pycache__/
+*.pyc

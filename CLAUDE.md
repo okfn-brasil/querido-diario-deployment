@@ -77,11 +77,14 @@ k8s/
 │   ├── production/          # Prod: réplicas, limites maiores, imagens fixas
 │   └── production-local/    # GITIGNORED — valores reais (endpoint S3, ClusterIssuer)
 ├── local/
-│   ├── setup.sh             # Idempotente: kind + Traefik + CNPG + overlay dev
-│   ├── teardown.sh
 │   └── traefik-values.yaml
 adrs/                        # Architecture Decision Records
 docs/                        # Documentação técnica complementar
+scripts/                     # Automação (Python, multiplataforma — ver Makefile)
+│   ├── pycommon.py          # Helpers compartilhados (log, download, ensure_kubectl/kind/helm...)
+│   ├── k8s_local_up.py      # Idempotente: kind + Traefik + CNPG + overlay dev
+│   ├── k8s_local_down.py
+│   └── ...
 ```
 
 ---
@@ -89,14 +92,20 @@ docs/                        # Documentação técnica complementar
 ## Desenvolvimento local (kind)
 
 ### Pré-requisitos
-- `docker`, `kubectl` ≥ 1.24, `helm`, `kind` ≥ 0.20
-- `kind` e `helm` são instalados automaticamente pelo `setup.sh` se ausentes
+- `docker` (com Linux containers habilitado no Docker Desktop, se Mac/Windows)
+- `python3` ≥ 3.9 (usado pelos scripts de automação em `scripts/`, sem dependências externas)
+- GNU Make — no Windows: `choco install make` / `scoop install make` / Git Bash / WSL
+- `kubectl`, `helm` e `kind` ≥ 0.20 são instalados automaticamente pelos scripts se ausentes
+
+Compatibilidade: todos os targets do `Makefile` chamam scripts Python (`scripts/*.py`) em vez de
+bash, então funcionam do mesmo jeito em Linux, macOS e Windows. Se `python3` não estiver no PATH
+do Windows, use `make PYTHON=python <target>`.
 
 ### Subir o ambiente
 
 ```bash
 make k8s-local-up              # cria cluster kind + aplica overlay dev (~10min no 1º run)
-make k8s-local-hosts           # adiciona *.queridodiario.local ao /etc/hosts (sudo)
+make k8s-local-hosts           # adiciona *.queridodiario.local ao hosts file (sudo/Administrador)
 make k8s-local-frontend-build  # builda e carrega imagem do frontend no cluster
 ```
 

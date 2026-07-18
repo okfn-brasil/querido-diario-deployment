@@ -32,11 +32,13 @@ k8s/
 │           ├── garage.yaml      # Storage S3-compatível (Garage v2)
 │           └── garage-webui.yaml
 └── local/
-    ├── setup.sh                 # Script idempotente: kind + Traefik + CNPG + overlay dev
-    ├── teardown.sh
     ├── kind-config.yaml
     └── traefik-values.yaml
 ```
+
+Os scripts que orquestram o cluster local (`k8s_local_up.py`, `k8s_local_down.py`, `k8s_local_hosts.py`,
+`k8s_local_data_processing.py`) ficam em `scripts/` na raiz do repositório — são invocados pelo
+`Makefile` e rodam em Linux, macOS e Windows (Python puro, sem dependências externas).
 
 ## O que roda no cluster
 
@@ -60,8 +62,8 @@ k8s/
 
 - `docker`
 - `kubectl` ≥ 1.24
-- `helm` (instalado automaticamente pelo setup.sh se ausente)
-- `kind` ≥ 0.20 (instalado automaticamente se ausente)
+- `python3` ≥ 3.9
+- `kubectl`, `helm` e `kind` são instalados automaticamente pelos scripts Python se ausentes
 
 ### Subir o ambiente
 
@@ -69,7 +71,7 @@ k8s/
 make k8s-local-up
 ```
 
-O script `k8s/local/setup.sh` é **idempotente** — pode ser executado múltiplas vezes. Ele:
+O script `scripts/k8s_local_up.py` (chamado por `make k8s-local-up`) é **idempotente** — pode ser executado múltiplas vezes. Ele:
 
 1. Verifica/instala `kind` e `helm`
 2. Cria o cluster kind `querido-diario-dev` (k8s 1.31)
@@ -82,7 +84,7 @@ O script `k8s/local/setup.sh` é **idempotente** — pode ser executado múltipl
 ### Configurar /etc/hosts
 
 ```bash
-make k8s-local-hosts   # requer sudo
+make k8s-local-hosts   # Linux/Mac: pede sudo; Windows: rode o terminal como Administrador
 ```
 
 Ou manualmente:

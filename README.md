@@ -26,7 +26,8 @@ querido-diario-deployment/
 │   ├── overlays/
 │   │   ├── dev/                     # Overlay de desenvolvimento local (kind)
 │   │   └── production/              # Overlay de produção
-│   └── local/                       # Scripts do cluster kind local
+│   └── local/                       # Config do cluster kind local
+├── scripts/                         # Automação Python (multiplataforma: Linux/Mac/Windows)
 └── docs/                            # Documentação técnica
 ```
 
@@ -48,7 +49,7 @@ Ver **[k8s/README.md](k8s/README.md)** para o guia completo.
 
 ```bash
 make k8s-local-up                # cria cluster kind + sobe tudo (~10min no primeiro run)
-make k8s-local-hosts             # adiciona entradas ao /etc/hosts (requer sudo)
+make k8s-local-hosts             # adiciona entradas ao hosts file (Linux/Mac: sudo; Windows: terminal como Administrador)
 make k8s-local-frontend-build    # builda e carrega a imagem do frontend
 ```
 
