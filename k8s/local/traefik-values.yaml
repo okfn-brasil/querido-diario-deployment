@@ -27,12 +27,6 @@ providers:
   kubernetesIngress:
     enabled: false
 
-logs:
-  general:
-    level: DEBUG
-  access:
-    enabled: true
-
 # Desabilita Gateway API — usamos apenas IngressRoute (CRD nativo do Traefik).
 # Os CRDs do Gateway API v1.1 usam isIP() em CEL, que requer k8s >= 1.31.
 gateway:
