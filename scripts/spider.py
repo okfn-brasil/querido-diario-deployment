@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from contextlib import ExitStack
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -33,6 +34,11 @@ NAMESPACE = "querido-diario"
 POSTGRES_SVC = "postgres-rw"
 POSTGRES_FORWARD_PORT = 5434
 GAZETTES_DB = "queridodiario"
+
+GARAGE_SVC = "garage"
+GARAGE_S3_REMOTE_PORT = 3900
+GARAGE_S3_FORWARD_PORT = 3910
+GARAGE_REGION = "us-east-1"
 
 
 def data_collection_dir(qd_dir: Path) -> Path:
@@ -112,46 +118,70 @@ def _load_local_env(dc_dir: Path) -> dict:
     return env
 
 
-def _cluster_postgres_reachable() -> bool:
-    return pc.run_ok(["kubectl", "get", "svc", POSTGRES_SVC, "-n", NAMESPACE])
+def _cluster_service_reachable(svc: str) -> bool:
+    return pc.run_ok(["kubectl", "get", "svc", svc, "-n", NAMESPACE])
 
 
-def _auto_database_url() -> str | None:
+def _auto_database_env() -> dict | None:
     user = pc.get_secret_value("app-secret", "QD_DATA_DB_USER", NAMESPACE)
     password = pc.get_secret_value("app-secret", "QD_DATA_DB_PASSWORD", NAMESPACE)
     if not user or not password:
         return None
-    return f"postgresql://{user}:{password}@localhost:{POSTGRES_FORWARD_PORT}/{GAZETTES_DB}"
+    return {
+        "QUERIDODIARIO_DATABASE_URL": (
+            f"postgresql://{user}:{password}@localhost:{POSTGRES_FORWARD_PORT}/{GAZETTES_DB}"
+        ),
+    }
+
+
+def _auto_storage_env() -> dict | None:
+    key = pc.get_secret_value("app-secret", "STORAGE_ACCESS_KEY", NAMESPACE)
+    secret = pc.get_secret_value("app-secret", "STORAGE_ACCESS_SECRET", NAMESPACE)
+    bucket = pc.get_secret_value("app-secret", "STORAGE_BUCKET", NAMESPACE)
+    if not key or not secret or not bucket:
+        return None
+    return {
+        "AWS_ACCESS_KEY_ID": key,
+        "AWS_SECRET_ACCESS_KEY": secret,
+        "AWS_ENDPOINT_URL": f"http://localhost:{GARAGE_S3_FORWARD_PORT}",
+        "AWS_REGION_NAME": GARAGE_REGION,
+        "FILES_STORE": f"s3://{bucket}/",
+    }
+
+
+# (rótulo, variável que indica config manual já presente, serviço k8s,
+#  porta local do port-forward, porta remota, builder das env vars)
+AUTO_CONNECTORS = [
+    ("Postgres", "QUERIDODIARIO_DATABASE_URL", POSTGRES_SVC, POSTGRES_FORWARD_PORT, 5432, _auto_database_env),
+    ("Garage (S3)", "FILES_STORE", GARAGE_SVC, GARAGE_S3_FORWARD_PORT, GARAGE_S3_REMOTE_PORT, _auto_storage_env),
+]
 
 
 def _run_scrapy(cmd: list, dc_dir: Path, env: dict) -> None:
-    """Roda um comando scrapy, conectando automaticamente ao Postgres do
-    cluster kind local (via port-forward temporário) quando nenhuma
-    QUERIDODIARIO_DATABASE_URL já estiver configurada — seja em .local.env,
-    seja no ambiente. Se `.local.env` já define isso (ex: pra apontar pra
-    outro ambiente), essa configuração sempre tem prioridade."""
-    if env.get("QUERIDODIARIO_DATABASE_URL"):
-        pc.run(cmd, cwd=str(dc_dir), env=env)
-        return
+    """Roda um comando scrapy, conectando automaticamente aos serviços do
+    cluster kind local (Postgres, Garage/S3) via port-forward temporário,
+    pra cada um cuja env var indicadora ainda não estiver configurada — seja
+    em `.local.env`, seja no ambiente. Configuração manual sempre tem
+    prioridade (ex: pra apontar pra outro ambiente, como o Revoada)."""
+    with ExitStack() as stack:
+        for label, marker_key, svc, local_port, remote_port, env_builder in AUTO_CONNECTORS:
+            if env.get(marker_key):
+                continue
+            if not _cluster_service_reachable(svc):
+                pc.info(
+                    f"Cluster kind local não encontrado (svc/{svc}) — rodando sem conexão "
+                    f"automática ao {label}. Configure {marker_key} em .local.env se precisar "
+                    "apontar pra outro ambiente."
+                )
+                continue
+            extra_env = env_builder()
+            if not extra_env:
+                pc.warn(f"Não consegui ler credenciais do secret app-secret pra {label} — pulando auto-conexão.")
+                continue
+            pc.info(f"Conectando automaticamente ao {label} do cluster local (svc/{svc})...")
+            stack.enter_context(pc.PortForward(svc, local_port, remote_port, NAMESPACE))
+            env.update(extra_env)
 
-    if not _cluster_postgres_reachable():
-        pc.info(
-            "Cluster kind local não encontrado (svc/postgres-rw) — rodando sem conexão "
-            "automática ao Postgres. Configure QUERIDODIARIO_DATABASE_URL em .local.env "
-            "se precisar apontar pra outro ambiente."
-        )
-        pc.run(cmd, cwd=str(dc_dir), env=env)
-        return
-
-    db_url = _auto_database_url()
-    if not db_url:
-        pc.warn("Não consegui ler QD_DATA_DB_USER/QD_DATA_DB_PASSWORD do secret app-secret — rodando sem conexão automática ao Postgres.")
-        pc.run(cmd, cwd=str(dc_dir), env=env)
-        return
-
-    pc.info(f"Conectando automaticamente ao Postgres do cluster local (svc/{POSTGRES_SVC})...")
-    with pc.PortForward(POSTGRES_SVC, POSTGRES_FORWARD_PORT, 5432, NAMESPACE):
-        env["QUERIDODIARIO_DATABASE_URL"] = db_url
         pc.run(cmd, cwd=str(dc_dir), env=env)
 
 
