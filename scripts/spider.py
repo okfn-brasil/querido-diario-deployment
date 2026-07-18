@@ -185,13 +185,37 @@ def _run_scrapy(cmd: list, dc_dir: Path, env: dict) -> None:
         pc.run(cmd, cwd=str(dc_dir), env=env)
 
 
+def _spider_requires_zyte(dc_dir: Path, spider_name: str) -> bool:
+    """Alguns spiders setam `zyte_smartproxy_enabled = True` pra contornar
+    proteção anti-bot em sites específicos, exigindo uma API key real do
+    Zyte Smart Proxy (serviço pago) — sem ela, `ZYTE_SMARTPROXY_APIKEY` fica
+    no placeholder hardcoded em settings.py (não configurável via
+    .local.env) e toda requisição falha com "Proxy Authentication Required"."""
+    matches = list((dc_dir / "gazette" / "spiders").rglob(f"{spider_name}.py"))
+    if not matches:
+        return False
+    try:
+        return "zyte_smartproxy_enabled = True" in matches[0].read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
 def cmd_run(args: argparse.Namespace) -> None:
     if not args.spider:
-        pc.err("defina SPIDER=<nome>   ex: make run-spider SPIDER=sp_campinas START=2025-01-01")
+        pc.err("defina SPIDER=<nome>   ex: make run-spider SPIDER=sp_sao_bernardo_do_campo START=2025-01-01")
     qd_dir = args.qd_dir
     scrapy = _require_venv(qd_dir)
     dc_dir = data_collection_dir(qd_dir)
     env = _load_local_env(dc_dir)
+
+    if _spider_requires_zyte(dc_dir, args.spider):
+        pc.warn(
+            f"'{args.spider}' usa zyte_smartproxy_enabled=True (proteção anti-bot do site). "
+            "ZYTE_SMARTPROXY_APIKEY é um placeholder hardcoded em settings.py, sem suporte a "
+            ".local.env — sem uma API key real do Zyte, as requisições vão falhar com "
+            "'Proxy Authentication Required'. Isso é uma limitação do repo querido-diario, "
+            "não do ambiente local."
+        )
 
     cmd = [str(scrapy), "crawl", args.spider]
     if args.start:
