@@ -14,8 +14,13 @@ data:
   GUNICORN_WORKER_CLASS: "sync"
   QUERIDO_DIARIO_OPENSEARCH_INDEX: "queridodiario"
   GAZETTE_OPENSEARCH_INDEX: "queridodiario"
-  POSTGRES_COMPANIES_DB: "qd_receita"
-  POSTGRES_AGGREGATES_DB: "queridodiariodb"
+  # Precisam bater com os bancos criados pelo bootstrap do CNPG
+  # (k8s/base/postgres/cluster.yaml: queridodiario/backend/companies).
+  # POSTGRES_AGGREGATES_* aponta pro mesmo banco/credenciais de POSTGRES_* —
+  # os agregados vivem no banco principal (ver aggregates_pipeline() no
+  # repo data-processing), não em um banco "aggregates" separado.
+  POSTGRES_COMPANIES_DB: "companies"
+  POSTGRES_AGGREGATES_DB: "queridodiario"
   POSTGRES_COMPANIES_PORT: "5432"
   POSTGRES_AGGREGATES_PORT: "5432"
   QUERIDO_DIARIO_FILES_ENDPOINT: ""
@@ -77,7 +82,8 @@ data:
   STORAGE_REGION: "us-east-1"
   STORAGE_ENDPOINT: ""
   EXECUTION_MODE: "UNPROCESSED"
-  POSTGRES_DB: "queridodiariodb"
+  # Banco criado pelo bootstrap do CNPG (k8s/base/postgres/cluster.yaml).
+  POSTGRES_DB: "queridodiario"
   POSTGRES_PORT: "5432"
   OPENSEARCH_INDEX: "queridodiario"
 
