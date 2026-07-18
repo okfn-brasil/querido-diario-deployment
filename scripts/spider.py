@@ -29,6 +29,11 @@ DEFAULT_QD_DIR = pc.REPO_ROOT.parent / "querido-diario"
 # evitar isso.
 COMPATIBLE_PYTHON_VERSIONS = ["3.10", "3.11", "3.12"]
 
+NAMESPACE = "querido-diario"
+POSTGRES_SVC = "postgres-rw"
+POSTGRES_FORWARD_PORT = 5434
+GAZETTES_DB = "queridodiario"
+
 
 def data_collection_dir(qd_dir: Path) -> Path:
     return qd_dir / "data_collection"
@@ -107,6 +112,49 @@ def _load_local_env(dc_dir: Path) -> dict:
     return env
 
 
+def _cluster_postgres_reachable() -> bool:
+    return pc.run_ok(["kubectl", "get", "svc", POSTGRES_SVC, "-n", NAMESPACE])
+
+
+def _auto_database_url() -> str | None:
+    user = pc.get_secret_value("app-secret", "QD_DATA_DB_USER", NAMESPACE)
+    password = pc.get_secret_value("app-secret", "QD_DATA_DB_PASSWORD", NAMESPACE)
+    if not user or not password:
+        return None
+    return f"postgresql://{user}:{password}@localhost:{POSTGRES_FORWARD_PORT}/{GAZETTES_DB}"
+
+
+def _run_scrapy(cmd: list, dc_dir: Path, env: dict) -> None:
+    """Roda um comando scrapy, conectando automaticamente ao Postgres do
+    cluster kind local (via port-forward temporário) quando nenhuma
+    QUERIDODIARIO_DATABASE_URL já estiver configurada — seja em .local.env,
+    seja no ambiente. Se `.local.env` já define isso (ex: pra apontar pra
+    outro ambiente), essa configuração sempre tem prioridade."""
+    if env.get("QUERIDODIARIO_DATABASE_URL"):
+        pc.run(cmd, cwd=str(dc_dir), env=env)
+        return
+
+    if not _cluster_postgres_reachable():
+        pc.info(
+            "Cluster kind local não encontrado (svc/postgres-rw) — rodando sem conexão "
+            "automática ao Postgres. Configure QUERIDODIARIO_DATABASE_URL em .local.env "
+            "se precisar apontar pra outro ambiente."
+        )
+        pc.run(cmd, cwd=str(dc_dir), env=env)
+        return
+
+    db_url = _auto_database_url()
+    if not db_url:
+        pc.warn("Não consegui ler QD_DATA_DB_USER/QD_DATA_DB_PASSWORD do secret app-secret — rodando sem conexão automática ao Postgres.")
+        pc.run(cmd, cwd=str(dc_dir), env=env)
+        return
+
+    pc.info(f"Conectando automaticamente ao Postgres do cluster local (svc/{POSTGRES_SVC})...")
+    with pc.PortForward(POSTGRES_SVC, POSTGRES_FORWARD_PORT, 5432, NAMESPACE):
+        env["QUERIDODIARIO_DATABASE_URL"] = db_url
+        pc.run(cmd, cwd=str(dc_dir), env=env)
+
+
 def cmd_run(args: argparse.Namespace) -> None:
     if not args.spider:
         pc.err("defina SPIDER=<nome>   ex: make run-spider SPIDER=sp_campinas START=2025-01-01")
@@ -121,7 +169,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     if args.end:
         cmd += ["-a", f"end={args.end}"]
 
-    pc.run(cmd, cwd=str(dc_dir), env=env)
+    _run_scrapy(cmd, dc_dir, env)
 
 
 def main() -> None:
