@@ -87,8 +87,22 @@ spec:
                     secretKeyRef:
                       name: app-secret
                       key: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+                # Reflete o limits.memory abaixo pro processo — main/__main__.py
+                # (repo querido-diario-data-processing) usa isso pra calcular
+                # o RLIMIT_AS (soft/hard) dinamicamente via Downward API, em
+                # vez de um valor hardcoded que fica dessincronizado quando
+                # o limite muda aqui.
+                - name: MEMORY_LIMIT_BYTES
+                  valueFrom:
+                    resourceFieldRef:
+                      containerName: data-processing
+                      resource: limits.memory
               resources:
+                # 6Gi: import de sentence-transformers/transformers/torch (pra
+                # reranking de excertos via embeddings) sozinho já passa de
+                # 2Gi antes de qualquer inferência, mesmo sem carregar lotes
+                # grandes de excertos.
                 limits:
-                  memory: 2048Mi
+                  memory: 6Gi
                 requests:
-                  memory: 512Mi
+                  memory: 1Gi
