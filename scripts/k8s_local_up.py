@@ -14,9 +14,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pycommon as pc  # noqa: E402
+import k8s_local_data_processing as dp  # noqa: E402
 
 CLUSTER_NAME = "querido-diario-dev"
 NAMESPACE = "querido-diario"
+GAZETTES_INDEX = "queridodiario"
 
 REPO_ROOT = pc.REPO_ROOT
 K8S_DIR = REPO_ROOT / "k8s"
@@ -288,6 +290,50 @@ def wait_for_infra() -> None:
     pc.run(["kubectl", "rollout", "status", "deployment/apache-tika", "-n", NAMESPACE, "--timeout=300s"])
 
 
+# ─── Bootstrap do índice do OpenSearch ──────────────────────────────────────
+#
+# O índice 'queridodiario' (e os temáticos) são criados pelo próprio job
+# data-processing, como primeiro passo do pipeline — antes mesmo de buscar
+# diários no banco (ver tasks/create_index.py no repo data-processing). Sem
+# rodar o job pelo menos uma vez, a API não encontra o índice. Em dev o
+# CronJob fica suspenso (roda sob demanda via `make k8s-local-data-processing`),
+# então disparamos ele aqui automaticamente na primeira vez.
+
+def _gazettes_index_exists() -> bool:
+    status = pc.capture(
+        [
+            "kubectl", "exec", "opensearch-0", "-n", NAMESPACE, "--",
+            "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+            f"http://localhost:9200/{GAZETTES_INDEX}",
+        ]
+    )
+    return status == "200"
+
+
+def bootstrap_opensearch_index() -> None:
+    pc.log(f"Verificando se o índice '{GAZETTES_INDEX}' já existe no OpenSearch...")
+    if _gazettes_index_exists():
+        pc.info(f"Índice '{GAZETTES_INDEX}' já existe.")
+        return
+
+    pc.warn(f"Índice '{GAZETTES_INDEX}' não encontrado — disparando job data-processing para criá-lo...")
+    job_name = dp.trigger_job(name_prefix="data-processing-bootstrap")
+
+    pc.log("Aguardando o job de bootstrap terminar (pode levar alguns minutos)...")
+    pc.run(
+        ["kubectl", "wait", f"job/{job_name}", "-n", NAMESPACE, "--for=condition=complete", "--timeout=600s"],
+        check=False,
+    )
+
+    if _gazettes_index_exists():
+        pc.info(f"Índice '{GAZETTES_INDEX}' criado com sucesso.")
+    else:
+        pc.warn(
+            f"Não foi possível confirmar a criação do índice '{GAZETTES_INDEX}'. "
+            f"Verifique os logs: kubectl logs -n {NAMESPACE} job/{job_name}"
+        )
+
+
 # ─── 11. hosts file ──────────────────────────────────────────────────────────
 
 def check_hosts_file() -> None:
@@ -320,6 +366,7 @@ def main() -> None:
     install_cnpg()
     apply_dev_overlay()
     wait_for_infra()
+    bootstrap_opensearch_index()
     check_hosts_file()
 
     print()
