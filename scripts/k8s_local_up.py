@@ -298,6 +298,16 @@ def wait_for_infra() -> None:
 # rodar o job pelo menos uma vez, a API não encontra o índice. Em dev o
 # CronJob fica suspenso (roda sob demanda via `make k8s-local-data-processing`),
 # então disparamos ele aqui automaticamente na primeira vez.
+#
+# Não esperamos o Job terminar (--for=condition=complete): em uma base local
+# vazia (sem território/spiders seedados) o pipeline sempre falha em uma
+# etapa POSTERIOR à criação do índice, então o Job nunca fica "complete" e
+# ficaríamos presos até o timeout. O índice em si aparece nos primeiros
+# segundos, então fazemos polling direto nele.
+
+BOOTSTRAP_POLL_TIMEOUT = 120
+BOOTSTRAP_POLL_INTERVAL = 3
+
 
 def _gazettes_index_exists() -> bool:
     status = pc.capture(
@@ -319,19 +329,18 @@ def bootstrap_opensearch_index() -> None:
     pc.warn(f"Índice '{GAZETTES_INDEX}' não encontrado — disparando job data-processing para criá-lo...")
     job_name = dp.trigger_job(name_prefix="data-processing-bootstrap")
 
-    pc.log("Aguardando o job de bootstrap terminar (pode levar alguns minutos)...")
-    pc.run(
-        ["kubectl", "wait", f"job/{job_name}", "-n", NAMESPACE, "--for=condition=complete", "--timeout=600s"],
-        check=False,
-    )
+    pc.log(f"Aguardando o índice aparecer (até {BOOTSTRAP_POLL_TIMEOUT}s)...")
+    deadline = time.time() + BOOTSTRAP_POLL_TIMEOUT
+    while time.time() < deadline:
+        if _gazettes_index_exists():
+            pc.info(f"Índice '{GAZETTES_INDEX}' criado com sucesso.")
+            return
+        time.sleep(BOOTSTRAP_POLL_INTERVAL)
 
-    if _gazettes_index_exists():
-        pc.info(f"Índice '{GAZETTES_INDEX}' criado com sucesso.")
-    else:
-        pc.warn(
-            f"Não foi possível confirmar a criação do índice '{GAZETTES_INDEX}'. "
-            f"Verifique os logs: kubectl logs -n {NAMESPACE} job/{job_name}"
-        )
+    pc.warn(
+        f"Índice '{GAZETTES_INDEX}' não apareceu em {BOOTSTRAP_POLL_TIMEOUT}s. "
+        f"Verifique os logs: kubectl logs -n {NAMESPACE} job/{job_name}"
+    )
 
 
 # ─── 11. hosts file ──────────────────────────────────────────────────────────
