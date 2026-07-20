@@ -54,7 +54,10 @@ spec:
             - name: discovery.type
               value: single-node
             - name: OPENSEARCH_JAVA_OPTS
-              value: "-Xms1g -Xmx1g"
+              # Heap = ~50% da memória do container (regra geral da JVM,
+              # deixa o resto pro page cache do SO / off-heap) — pra um
+              # índice de ~400G, 1GB de heap era claramente insuficiente.
+              value: "-Xms8g -Xmx8g"
             - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -62,11 +65,11 @@ spec:
                   key: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
           resources:
             limits:
-              memory: 2500Mi
-              cpu: "1"
+              memory: 16Gi
+              cpu: "2"
             requests:
-              memory: 1500Mi
-              cpu: "250m"
+              memory: 12Gi
+              cpu: "500m"
           livenessProbe:
             exec:
               command:
@@ -103,7 +106,9 @@ spec:
         storageClassName: ceph-block-hdd
         resources:
           requests:
-            storage: 20Gi
+            # ~400G de dados reais (migração da VPS antiga) + margem sob os
+            # watermarks de disco do OpenSearch (85%/90%/95%).
+            storage: 450Gi
 ---
 apiVersion: v1
 kind: Service
