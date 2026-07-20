@@ -9,7 +9,19 @@ env:
   NAMESPACE: querido-diario
 
 jobs:
+  check-secret-refs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pyyaml
+      - name: Valida referências a Secret/ConfigMap nos manifestos k8s
+        run: python3 scripts/check_secret_refs.py
+
   deploy:
+    needs: check-secret-refs
     runs-on: ubuntu-latest
     environment: production  # habilitar "required reviewers" nas configurações do repo
 
