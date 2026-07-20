@@ -14,24 +14,19 @@ spec:
       labels:
         app: backend
     spec:
-      containers:
-        - name: backend
+      # Roda as migrations do Django antes do gunicorn subir. O Dockerfile/
+      # deployment não faziam isso (diferente do docker-compose antigo, que
+      # rodava "migrate && runserver") — perdido na migração pro k8s
+      # (ADR-001). --noinput é seguro pra rodar de novo a cada rollout
+      # (idempotente quando não há migration nova pendente).
+      initContainers:
+        - name: migrate
           image: ghcr.io/okfn-brasil/querido-diario-backend:latest
-          command:
-            - gunicorn
-            - config.wsgi:application
-            - -w
-            - "2"
-            - -b
-            - :8000
-            - --log-level
-            - info
-          ports:
-            - containerPort: 8000
-          envFrom:
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          envFrom: &backend-env-from
             - configMapRef:
                 name: app-config
-          env:
+          env: &backend-env
             - name: QD_BACKEND_SECRET_KEY
               valueFrom:
                 secretKeyRef:
@@ -52,6 +47,22 @@ spec:
                 secretKeyRef:
                   name: app-secret
                   key: MAILJET_SECRET_KEY
+      containers:
+        - name: backend
+          image: ghcr.io/okfn-brasil/querido-diario-backend:latest
+          command:
+            - gunicorn
+            - config.wsgi:application
+            - -w
+            - "2"
+            - -b
+            - :8000
+            - --log-level
+            - info
+          ports:
+            - containerPort: 8000
+          envFrom: *backend-env-from
+          env: *backend-env
           resources:
             limits:
               memory: 768Mi
