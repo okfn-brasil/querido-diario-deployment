@@ -27,6 +27,12 @@ spec:
       labels:
         app: opensearch
     spec:
+      # A imagem oficial do OpenSearch roda como usuário não-root (uid/gid
+      # 1000). Sem fsGroup, o PVC do Ceph é montado como root:root e o
+      # processo não consegue escrever em /usr/share/opensearch/data
+      # (AccessDeniedException no boot).
+      securityContext:
+        fsGroup: 1000
       initContainers:
         # OpenSearch requer vm.max_map_count >= 262144 no host.
         # Fallback caso privileged seja bloqueado: configurar no node via CCSL
