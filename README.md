@@ -102,12 +102,12 @@ make build-all                   # todas as imagens acima
 Os raspadores rodam em produção na **Zyte (Scrapy Cloud)**. Para testes locais:
 
 ```bash
-make spider-setup                                     # uma vez: cria venv e instala deps
+make spider-setup                                     # uma vez: sincroniza o ambiente (uv sync)
 make spider-list                                      # lista todos os spiders
 make run-spider SPIDER=sp_sao_bernardo_do_campo START=2025-01-01   # executa um spider
 ```
 
-`make run-spider` conecta automaticamente ao Postgres e ao Garage (S3) do cluster kind local (port-forward + credenciais do secret `app-secret`) — não precisa configurar nada. Use `../querido-diario/data_collection/.local.env` só pra apontar pra outro ambiente (ex: Revoada).
+`make run-spider` conecta automaticamente ao Postgres e ao Garage (S3) do cluster kind local (port-forward + credenciais do secret `app-secret`) — não precisa configurar nada. Use `../querido-diario/querido_diario_raspadores/.local.env` só pra apontar pra outro ambiente (ex: Revoada).
 
 Alguns spiders (`sp_campinas`, `sp_osasco`, `am_manaus`, entre outros — setam `zyte_smartproxy_enabled = True`) dependem do Zyte Smart Proxy (serviço pago) pra contornar proteção anti-bot; sem uma API key real, falham com "Proxy Authentication Required". `make run-spider` avisa quando isso acontece. Para testes locais, prefira um spider que não exija Zyte.
 

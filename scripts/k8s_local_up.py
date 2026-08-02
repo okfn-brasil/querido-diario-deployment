@@ -405,7 +405,7 @@ def bootstrap_opensearch_index() -> None:
 # não são geridas por Django nem criadas por nada dentro do cluster — quem
 # cria (SQLAlchemy create_all) e popula (territories.csv + lista de spiders)
 # é o próprio repo de raspadores, via `scrapy qd-sync-spiders`
-# (ver ../querido-diario/data_collection/gazette/database/models.py e
+# (ver ../querido-diario/querido_diario_raspadores/gazette/database/models.py e
 # gazette/commands/qd-sync-spiders.py). Sem isso, a API e o data-processing
 # não têm schema pra consultar. Esse passo é opcional: se o repo irmão
 # ../querido-diario não estiver clonado, avisamos e seguimos em frente sem
@@ -416,7 +416,7 @@ POSTGRES_FORWARD_PORT = 5433
 
 
 def bootstrap_postgres_schema() -> None:
-    dc_dir = spider.data_collection_dir(QD_DIR)
+    dc_dir = spider.raspadores_dir(QD_DIR)
     if not dc_dir.exists():
         pc.info(
             f"Repositório de raspadores não encontrado em {QD_DIR} — pulando "
@@ -426,9 +426,7 @@ def bootstrap_postgres_schema() -> None:
 
     pc.log("Sincronizando schema/territórios/spiders no Postgres (scrapy qd-sync-spiders)...")
     try:
-        if not spider.venv_scrapy(QD_DIR).exists():
-            pc.log("venv dos raspadores não encontrado — criando (make spider-setup)...")
-            spider.setup_venv(QD_DIR)
+        spider.setup_venv(QD_DIR)
 
         user = pc.get_secret_value("app-secret", "QD_DATA_DB_USER", NAMESPACE)
         password = pc.get_secret_value("app-secret", "QD_DATA_DB_PASSWORD", NAMESPACE)
@@ -442,7 +440,7 @@ def bootstrap_postgres_schema() -> None:
             env["QUERIDODIARIO_DATABASE_URL"] = (
                 f"postgresql://{user}:{password}@localhost:{POSTGRES_FORWARD_PORT}/{GAZETTES_DB}"
             )
-            pc.run([str(spider.venv_scrapy(QD_DIR)), "qd-sync-spiders"], cwd=str(dc_dir), env=env)
+            pc.run(spider.scrapy_cmd(QD_DIR) + ["qd-sync-spiders"], cwd=str(dc_dir), env=env)
 
         pc.info("Schema/territórios/spiders sincronizados no Postgres.")
     except Exception as e:  # best-effort — não deve travar o k8s-local-up

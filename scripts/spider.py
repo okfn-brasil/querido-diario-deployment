@@ -2,8 +2,9 @@
 """spider.py — setup/list/run dos raspadores (Scrapy) localmente.
 
 Substitui os targets spider-setup/spider-list/run-spider do Makefile, que
-dependiam de `.venv/bin/` (inexistente no Windows, onde é `.venv/Scripts/`)
-e de `source .local.env` (sintaxe bash).
+dependiam de `source .local.env` (sintaxe bash). O ambiente/dependências dos
+raspadores são geridos via `uv` (pyproject.toml/uv.lock em
+querido_diario_raspadores/), então basta ter o `uv` instalado.
 
 Uso:
     python3 scripts/spider.py setup  [--qd-dir PATH]
@@ -23,13 +24,6 @@ import pycommon as pc  # noqa: E402
 
 DEFAULT_QD_DIR = pc.REPO_ROOT.parent / "querido-diario"
 
-# requirements.txt pina versões antigas (ex: lxml==4.9.3) sem wheel pra
-# versões recentes do Python (3.13+) — força build a partir do source, que
-# exige headers de sistema (libxml2-dev/libxslt-dev). Preferimos criar o
-# venv com uma versão de Python mais antiga (via pyenv, se disponível) pra
-# evitar isso.
-COMPATIBLE_PYTHON_VERSIONS = ["3.10", "3.11", "3.12"]
-
 NAMESPACE = "querido-diario"
 POSTGRES_SVC = "postgres-rw"
 POSTGRES_FORWARD_PORT = 5434
@@ -41,49 +35,39 @@ GARAGE_S3_FORWARD_PORT = 3910
 GARAGE_REGION = "us-east-1"
 
 
-def data_collection_dir(qd_dir: Path) -> Path:
-    return qd_dir / "data_collection"
+def raspadores_dir(qd_dir: Path) -> Path:
+    return qd_dir / "querido_diario_raspadores"
 
 
-def venv_dir(qd_dir: Path) -> Path:
-    return data_collection_dir(qd_dir) / ".venv"
+def _require_uv() -> str:
+    uv = pc.which("uv")
+    if not uv:
+        pc.err(
+            "uv não encontrado. Instale-o "
+            "(https://docs.astral.sh/uv/getting-started/installation/) para gerenciar "
+            "o ambiente dos raspadores."
+        )
+    return uv
 
 
-def venv_bin(qd_dir: Path) -> Path:
-    v = venv_dir(qd_dir)
-    return v / ("Scripts" if pc.IS_WINDOWS else "bin")
+def _require_project(qd_dir: Path) -> Path:
+    dc_dir = raspadores_dir(qd_dir)
+    pyproject = dc_dir / "pyproject.toml"
+    if not pyproject.exists():
+        pc.err(f"pyproject.toml não encontrado em {pyproject} — confira QD_DIR.")
+    return dc_dir
 
 
-def venv_python(qd_dir: Path) -> Path:
-    return venv_bin(qd_dir) / pc.exe("python")
-
-
-def venv_scrapy(qd_dir: Path) -> Path:
-    return venv_bin(qd_dir) / pc.exe("scrapy")
+def scrapy_cmd(qd_dir: Path) -> list:
+    """Comando base pra rodar `scrapy` no ambiente uv do projeto de raspadores."""
+    return [_require_uv(), "run", "--project", str(_require_project(qd_dir)), "scrapy"]
 
 
 def setup_venv(qd_dir: Path) -> None:
-    dc_dir = data_collection_dir(qd_dir)
-    requirements = dc_dir / "requirements.txt"
-    if not requirements.exists():
-        pc.err(f"requirements.txt não encontrado em {requirements} — confira QD_DIR.")
-
-    python_bin = pc.find_python(COMPATIBLE_PYTHON_VERSIONS)
-    pc.info(f"Usando interpretador: {python_bin}")
-    pc.log(f"Criando venv em {venv_dir(qd_dir)}...")
-    pc.run([python_bin, "-m", "venv", str(venv_dir(qd_dir))])
-
-    pip = venv_bin(qd_dir) / pc.exe("pip")
-    pc.run([str(pip), "install", "--upgrade", "pip"])
-    # requirements.txt usa --hash (modo --require-hashes do pip), mas não
-    # pina setuptools — é dependência transitiva implícita do Scrapy. Numa
-    # venv nova, o setuptools do ensurepip às vezes já satisfaz isso sem
-    # baixar nada; em outras (varia por patch do Python/pip instalados),
-    # o pip tenta buscar uma versão nova, sem hash, e o --require-hashes
-    # rejeita com "must have their versions pinned with ==". Pinamos aqui
-    # pra tornar o resultado determinístico entre máquinas.
-    pc.run([str(pip), "install", "setuptools==79.0.1"])
-    pc.run([str(pip), "install", "-r", str(requirements)])
+    dc_dir = _require_project(qd_dir)
+    uv = _require_uv()
+    pc.log(f"Sincronizando ambiente dos raspadores (uv sync) em {dc_dir}...")
+    pc.run([uv, "sync", "--project", str(dc_dir)])
     pc.log("Ambiente dos raspadores pronto.")
 
 
@@ -91,17 +75,9 @@ def cmd_setup(args: argparse.Namespace) -> None:
     setup_venv(args.qd_dir)
 
 
-def _require_venv(qd_dir: Path) -> Path:
-    scrapy = venv_scrapy(qd_dir)
-    if not scrapy.exists():
-        pc.err("venv não encontrado — execute: make spider-setup")
-    return scrapy
-
-
 def cmd_list(args: argparse.Namespace) -> None:
     qd_dir = args.qd_dir
-    scrapy = _require_venv(qd_dir)
-    pc.run([str(scrapy), "list"], cwd=str(data_collection_dir(qd_dir)))
+    pc.run(scrapy_cmd(qd_dir) + ["list"], cwd=str(raspadores_dir(qd_dir)))
 
 
 def _load_local_env(dc_dir: Path) -> dict:
@@ -204,8 +180,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     if not args.spider:
         pc.err("defina SPIDER=<nome>   ex: make run-spider SPIDER=sp_sao_bernardo_do_campo START=2025-01-01")
     qd_dir = args.qd_dir
-    scrapy = _require_venv(qd_dir)
-    dc_dir = data_collection_dir(qd_dir)
+    dc_dir = raspadores_dir(qd_dir)
     env = _load_local_env(dc_dir)
 
     if _spider_requires_zyte(dc_dir, args.spider):
@@ -217,7 +192,7 @@ def cmd_run(args: argparse.Namespace) -> None:
             "não do ambiente local."
         )
 
-    cmd = [str(scrapy), "crawl", args.spider]
+    cmd = scrapy_cmd(qd_dir) + ["crawl", args.spider]
     if args.start:
         cmd += ["-a", f"start={args.start}"]
     if args.end:
@@ -241,7 +216,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, parents=[qd_dir_parser])
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("setup", help="Cria venv e instala dependências", parents=[qd_dir_parser])
+    sub.add_parser("setup", help="Sincroniza o ambiente dos raspadores (uv sync)", parents=[qd_dir_parser])
     sub.add_parser("list", help="Lista os raspadores disponíveis", parents=[qd_dir_parser])
 
     run_parser = sub.add_parser("run", help="Executa um raspador", parents=[qd_dir_parser])
