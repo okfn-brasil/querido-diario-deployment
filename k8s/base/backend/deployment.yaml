@@ -72,6 +72,13 @@ spec:
             httpGet:
               path: /health/
               port: 8000
+              # O kubelet bate no pod pelo IP interno (ex: 172.20.x.x:8000),
+              # que o Django rejeita (DisallowedHost) por não estar em
+              # QD_BACKEND_ALLOWED_HOSTS. Forçar um Host permitido no probe
+              # em vez de abrir ALLOWED_HOSTS pra "*".
+              httpHeaders:
+                - name: Host
+                  value: backend-api.queridodiario.org.br
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 10
@@ -79,11 +86,19 @@ spec:
             httpGet:
               path: /health/
               port: 8000
+              httpHeaders:
+                - name: Host
+                  value: backend-api.queridodiario.org.br
             initialDelaySeconds: 10
             periodSeconds: 10
           volumeMounts:
             - name: static-files
               mountPath: /opt/app/static
+              # subPath evita montar a raiz do PVC: todo volume ext4 (block
+              # storage, ex: Ceph RBD) tem um "lost+found" root:root/700 na
+              # raiz, que o WhiteNoise não consegue ler ao varrer STATIC_ROOT
+              # (PermissionError, crashloop). Um subdiretório nunca tem isso.
+              subPath: static
       volumes:
         - name: static-files
           persistentVolumeClaim:
