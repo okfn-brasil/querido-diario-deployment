@@ -170,7 +170,7 @@ export NEW_OPENSEARCH_HOST='$NEW_OPENSEARCH_HOST'
 export NEW_OPENSEARCH_USER='admin'
 export NEW_OPENSEARCH_PASSWORD='$NEW_OPENSEARCH_PASSWORD'
 export NEW_OPENSEARCH_INDEX='$NEW_OPENSEARCH_INDEX'
-python3 opensearch-migrate.py $DRY_RUN_FLAG $RESUME_FLAG
+python3 -u opensearch-migrate.py $DRY_RUN_FLAG $RESUME_FLAG
 echo \$? > /checkpoint/migrate.exit
 SCRIPT
 
