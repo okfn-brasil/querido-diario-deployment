@@ -60,8 +60,11 @@ cleanup() {
 trap cleanup EXIT
 
 info "Subindo pod auxiliar ($HELPER_POD, imagem $HELPER_IMAGE) dentro do cluster..."
+# sleep generoso (6h): é o processo principal do pod — se expirar antes do
+# pg_restore terminar, o pod (e o restore em background dentro dele) morre
+# junto, mesmo com setsid.
 kubectl run "$HELPER_POD" -n "$NAMESPACE" --image="$HELPER_IMAGE" --restart=Never \
-    --command -- sleep 3600 >/dev/null
+    --command -- sleep 21600 >/dev/null
 
 info "Aguardando pod auxiliar ficar pronto..."
 kubectl wait --for=condition=Ready "pod/$HELPER_POD" -n "$NAMESPACE" --timeout=60s >/dev/null
@@ -98,12 +101,47 @@ for entry in "${DATABASES[@]}"; do
         log "kubectl cp OK: $expected_size bytes transferidos."
     fi
 
-    info "Restaurando /tmp/${old_db}.dump -> banco '$new_db' (conexão interna ao cluster, sem port-forward)"
-    run "pg_restore em $new_db" \
-        kubectl exec "$HELPER_POD" -n "$NAMESPACE" -- env PGPASSWORD="$PG_PASSWORD" \
-        pg_restore --no-owner --role="$PG_USER" \
-        -h "$PG_SVC" -U "$PG_USER" -d "$new_db" \
-        --jobs=4 --verbose "/tmp/${old_db}.dump"
+    info "Restaurando /tmp/${old_db}.dump -> banco '$new_db' (em background dentro do pod)"
+    if [ "$DRY_RUN" = "true" ]; then
+        info "[dry-run] pg_restore em $new_db (background, dentro do pod)"
+    else
+        # pg_restore roda em background DENTRO do pod, desanexado de vez da
+        # stream do kubectl exec que o dispara — um restore grande pode
+        # levar minutos/horas, e prender isso a uma única conexão exec ao
+        # vivo é frágil (já aconteceu: a stream deu timeout bem no fim,
+        # "read tcp ...: i/o timeout", e o trap de limpeza matou o pod
+        # logo depois, cortando o restore no meio das constraints).
+        # setsid + </dev/null + redirecionar stdout/stderr pra arquivo é
+        # necessário — só "cmd &" NÃO desanexa: o processo mantém os file
+        # descriptors herdados da própria stream do exec, e o exec fica
+        # bloqueado até o processo em background terminar (testado e
+        # confirmado manualmente contra este cluster antes deste script
+        # existir). Escreve o script num arquivo primeiro (em vez de
+        # aninhar sh -c dentro de sh -c) pra não depender de escaping
+        # frágil de aspas/$ através de duas camadas de shell.
+        kubectl exec -i "$HELPER_POD" -n "$NAMESPACE" -- sh -c "cat > /tmp/${old_db}.restore.sh" <<SCRIPT
+export PGPASSWORD='$PG_PASSWORD'
+pg_restore --no-owner --role='$PG_USER' -h '$PG_SVC' -U '$PG_USER' -d '$new_db' --jobs=4 --verbose '/tmp/${old_db}.dump'
+echo \$? > '/tmp/${old_db}.restore.exit'
+SCRIPT
+
+        kubectl exec "$HELPER_POD" -n "$NAMESPACE" -- sh -c "
+            rm -f '/tmp/${old_db}.restore.exit'
+            setsid sh '/tmp/${old_db}.restore.sh' < /dev/null > '/tmp/${old_db}.restore.log' 2>&1 &
+        "
+
+        info "Aguardando pg_restore terminar (pode levar bastante tempo pra bancos grandes)..."
+        while ! kubectl exec "$HELPER_POD" -n "$NAMESPACE" -- test -f "/tmp/${old_db}.restore.exit" 2>/dev/null; do
+            sleep 15
+        done
+
+        exit_code=$(kubectl exec "$HELPER_POD" -n "$NAMESPACE" -- cat "/tmp/${old_db}.restore.exit")
+        if [ "$exit_code" != "0" ]; then
+            warn "pg_restore falhou (exit $exit_code) pra $new_db — últimas linhas do log:"
+            kubectl exec "$HELPER_POD" -n "$NAMESPACE" -- tail -50 "/tmp/${old_db}.restore.log" || true
+            err "Restore de $new_db falhou — ver log acima. Banco pode estar em estado parcial, limpe (DROP SCHEMA public CASCADE; CREATE SCHEMA public;) antes de tentar de novo."
+        fi
+    fi
     log "OK: $new_db restaurado."
 done
 
