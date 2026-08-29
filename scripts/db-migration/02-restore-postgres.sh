@@ -68,8 +68,12 @@ kubectl wait --for=condition=Ready "pod/$HELPER_POD" -n "$NAMESPACE" --timeout=6
 
 for entry in "${DATABASES[@]}"; do
     IFS=':' read -r old_db new_db <<< "$entry"
-    dump_file="$DUMPS_DIR/${old_db}-latest.dump"
-    [ -f "$dump_file" ] || err "Dump não encontrado: $dump_file (rode 01-dump-postgres.sh antes)."
+    # ${old_db}-latest.dump é um symlink (criado por 01-dump-postgres.sh)
+    # pro dump com timestamp — resolver antes do kubectl cp, senão ele
+    # copia o link em si (poucos bytes, o texto do caminho apontado) e
+    # não o conteúdo real do dump.
+    dump_file="$(readlink -f "$DUMPS_DIR/${old_db}-latest.dump")"
+    [ -f "$dump_file" ] || err "Dump não encontrado: $DUMPS_DIR/${old_db}-latest.dump (rode 01-dump-postgres.sh antes)."
 
     if [ "$FORCE" != "true" ]; then
         existing=$(kubectl exec "$HELPER_POD" -n "$NAMESPACE" -- env PGPASSWORD="$PG_PASSWORD" \
