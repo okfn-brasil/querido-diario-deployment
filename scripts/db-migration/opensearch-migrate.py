@@ -106,7 +106,13 @@ def main() -> None:
         print(f"[info] Retomando a partir do documento #{resume_from}")
 
     def generate_actions():
-        for i, hit in enumerate(scan(old_client, index=old_index, query={"query": {"match_all": {}}})):
+        # scroll="30m": o default do scan() (~5m) expira antes de terminar
+        # de pular os primeiros N documentos ao retomar de um
+        # --resume-from grande — scan() não faz seek, ele itera e descarta
+        # localmente, então reprocessar centenas de milhares de docs pode
+        # facilmente passar do TTL padrão do scroll context na origem
+        # (aconteceu na prática: "No search context found for id ...").
+        for i, hit in enumerate(scan(old_client, index=old_index, query={"query": {"match_all": {}}}, scroll="30m")):
             if i < resume_from:
                 continue
             yield {
