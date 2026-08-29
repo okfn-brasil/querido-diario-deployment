@@ -23,8 +23,17 @@
 # Por padrão o script recusa restaurar sobre um banco que já tenha tabelas
 # (evita sobrescrever silenciosamente). Use --force pra pular essa checagem
 # (ex.: re-rodando após um restore parcial que você sabe que precisa ser
-# limpo manualmente antes — DROP SCHEMA public CASCADE; CREATE SCHEMA
-# public; no banco afetado. --force não limpa nada sozinho).
+# limpo manualmente antes:
+#   DROP SCHEMA public CASCADE;
+#   CREATE SCHEMA public AUTHORIZATION pg_database_owner;
+# IMPORTANTE: "CREATE SCHEMA public;" sozinho (sem AUTHORIZATION) cria a
+# schema com dono "postgres" (quem rodou o comando), quebrando o modelo de
+# permissão default do bootstrap CNPG (o dono correto é o pseudo-role
+# pg_database_owner, que qualquer dono do banco — "admin" — herda
+# automaticamente). Isso já causou "permission denied for schema public"
+# em SEQUENCE SET/CONSTRAINT no meio de um restore real, mesmo com CREATE
+# TABLE/COPY funcionando normalmente antes disso. --force não limpa nada
+# sozinho.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -83,7 +92,7 @@ for entry in "${DATABASES[@]}"; do
             psql -h "$PG_SVC" -U "$PG_USER" -d "$new_db" \
             -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null || echo "?")
         if [ "$existing" != "0" ]; then
-            err "Banco '$new_db' já tem $existing tabela(s) — abortando para não sobrescrever. Limpe manualmente (DROP SCHEMA public CASCADE; CREATE SCHEMA public;) ou use --force se tiver certeza."
+            err "Banco '$new_db' já tem $existing tabela(s) — abortando para não sobrescrever. Limpe manualmente (DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION pg_database_owner;) ou use --force se tiver certeza."
         fi
     fi
 
@@ -139,7 +148,7 @@ SCRIPT
         if [ "$exit_code" != "0" ]; then
             warn "pg_restore falhou (exit $exit_code) pra $new_db — últimas linhas do log:"
             kubectl exec "$HELPER_POD" -n "$NAMESPACE" -- tail -50 "/tmp/${old_db}.restore.log" || true
-            err "Restore de $new_db falhou — ver log acima. Banco pode estar em estado parcial, limpe (DROP SCHEMA public CASCADE; CREATE SCHEMA public;) antes de tentar de novo."
+            err "Restore de $new_db falhou — ver log acima. Banco pode estar em estado parcial, limpe (DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION pg_database_owner;) antes de tentar de novo."
         fi
     fi
     log "OK: $new_db restaurado."
