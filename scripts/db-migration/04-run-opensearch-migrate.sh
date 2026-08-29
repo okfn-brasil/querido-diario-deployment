@@ -114,7 +114,16 @@ spec:
 PODYAML
 
 info "Aguardando pod auxiliar ficar pronto..."
-kubectl wait --for=condition=Ready "pod/$HELPER_POD" -n "$NAMESPACE" --timeout=60s >/dev/null
+wait_ok=false
+for attempt in 1 2 3 4 5; do
+    if kubectl wait --for=condition=Ready "pod/$HELPER_POD" -n "$NAMESPACE" --timeout=60s >/dev/null; then
+        wait_ok=true
+        break
+    fi
+    warn "Tentativa $attempt de aguardar o pod ficar pronto falhou (provável instabilidade de rede) — tentando de novo..."
+    sleep 5
+done
+[ "$wait_ok" = "true" ] || err "Pod auxiliar não ficou pronto após 5 tentativas."
 
 info "Copiando opensearch-migrate.py -> pod auxiliar:/checkpoint/ (checkpoint fica no mesmo diretório, no PVC persistente)"
 # Passos de setup (cp, pip install) sempre rodam de verdade — não usam
@@ -125,7 +134,20 @@ info "Copiando opensearch-migrate.py -> pod auxiliar:/checkpoint/ (checkpoint fi
 kubectl cp --retries=5 "$SCRIPT_DIR/opensearch-migrate.py" "$NAMESPACE/$HELPER_POD:/checkpoint/opensearch-migrate.py"
 
 info "Instalando opensearch-py no pod auxiliar..."
-kubectl exec "$HELPER_POD" -n "$NAMESPACE" -- pip install --quiet opensearch-py
+# kubectl exec síncrono também sofre com a mesma instabilidade de conexão
+# com a API do cluster que já vimos em outros pontos ("connection reset
+# by peer") — pip install é rápido, então um retry simples resolve (não
+# precisa do mecanismo pesado de setsid+polling usado pra migração em si).
+pip_ok=false
+for attempt in 1 2 3 4 5; do
+    if kubectl exec "$HELPER_POD" -n "$NAMESPACE" -- sh -c "python3 -c 'import opensearchpy' 2>/dev/null || pip install --quiet opensearch-py"; then
+        pip_ok=true
+        break
+    fi
+    warn "Tentativa $attempt de instalar/verificar opensearch-py falhou (provável instabilidade de rede) — tentando de novo..."
+    sleep 5
+done
+[ "$pip_ok" = "true" ] || err "Não consegui instalar opensearch-py no pod auxiliar após 5 tentativas."
 
 DRY_RUN_FLAG=""
 [ "${DRY_RUN:-false}" = "true" ] && DRY_RUN_FLAG="--dry-run"
