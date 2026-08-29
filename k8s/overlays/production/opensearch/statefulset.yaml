@@ -53,6 +53,14 @@ spec:
           env:
             - name: discovery.type
               value: single-node
+            # install_demo_configuration.sh tenta sobrescrever
+            # esnode.pem/esnode-key.pem/root-ca.pem a cada boot — quebra
+            # com os certs montados via cert-manager (Secret = read-only).
+            # opensearch.yml próprio (ver certs.yaml) já traz
+            # plugins.security.ssl.* apontando pros certs corretos, então
+            # o instalador não faz falta.
+            - name: DISABLE_INSTALL_DEMO_CONFIG
+              value: "true"
             - name: OPENSEARCH_JAVA_OPTS
               # Heap = ~50% da memória do container (regra geral da JVM,
               # deixa o resto pro page cache do SO / off-heap) — pra um
@@ -97,6 +105,25 @@ spec:
           volumeMounts:
             - name: opensearch-data
               mountPath: /usr/share/opensearch/data
+            - name: opensearch-config
+              mountPath: /usr/share/opensearch/config/opensearch.yml
+              subPath: opensearch.yml
+            - name: opensearch-certs
+              mountPath: /usr/share/opensearch/config/esnode.pem
+              subPath: tls.crt
+            - name: opensearch-certs
+              mountPath: /usr/share/opensearch/config/esnode-key.pem
+              subPath: tls.key
+            - name: opensearch-certs
+              mountPath: /usr/share/opensearch/config/root-ca.pem
+              subPath: ca.crt
+      volumes:
+        - name: opensearch-config
+          configMap:
+            name: opensearch-config
+        - name: opensearch-certs
+          secret:
+            secretName: opensearch-server-tls
   volumeClaimTemplates:
     - metadata:
         name: opensearch-data

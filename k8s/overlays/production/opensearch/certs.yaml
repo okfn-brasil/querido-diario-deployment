@@ -1,0 +1,125 @@
+---
+# CA interna + certificado de servidor pro OpenSearch, via cert-manager.
+#
+# Por quê uma CA própria em vez de reaproveitar o ClusterIssuer
+# "letsencrypt-prod" (usado em certificates.yaml pro tráfego público via
+# Traefik): Let's Encrypt só emite certificados pra domínios públicos
+# validáveis via HTTP-01/DNS-01 — não emite para nomes internos do cluster
+# (opensearch.querido-diario.svc.cluster.local). Por isso o padrão do
+# cert-manager pra TLS interno/mTLS é uma CA própria (selfSigned → CA →
+# issuer "ca" assinando os certs de servidor).
+#
+# O cert resultante troca os certificados demo autoassinados que vêm
+# hardcoded na imagem oficial do OpenSearch (root-ca.pem/esnode.pem/
+# esnode-key.pem) — ver statefulset.yaml, que monta os arquivos deste
+# Certificate por cima dos paths demo. Precisa também de opensearch.yml
+# próprio (ver ConfigMap "opensearch-config" abaixo) com
+# plugins.security.ssl.* explícito: sem isso o plugin de segurança não
+# sabe onde estão os certs (validado: sem essas linhas, boot falha com
+# "No SSL configuration found" — a config default da imagem só funciona
+# porque install_demo_configuration.sh injeta esses valores em runtime,
+# e esse instalador é desabilitado aqui porque ele tenta sobrescrever os
+# certs montados via Secret, que são somente-leitura).
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: opensearch-selfsigned-issuer
+  namespace: querido-diario
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: opensearch-ca
+  namespace: querido-diario
+spec:
+  isCA: true
+  commonName: querido-diario-opensearch-internal-ca
+  secretName: opensearch-ca-secret
+  duration: 87600h # 10 anos — CA interna, sem exposição pública
+  renewBefore: 720h
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  issuerRef:
+    name: opensearch-selfsigned-issuer
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: opensearch-ca-issuer
+  namespace: querido-diario
+spec:
+  ca:
+    secretName: opensearch-ca-secret
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: opensearch-server-cert
+  namespace: querido-diario
+spec:
+  commonName: opensearch.querido-diario.svc.cluster.local
+  secretName: opensearch-server-tls
+  duration: 8760h # 1 ano
+  renewBefore: 720h
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  dnsNames:
+    - opensearch
+    - opensearch.querido-diario
+    - opensearch.querido-diario.svc
+    - opensearch.querido-diario.svc.cluster.local
+    - localhost
+  usages:
+    - server auth
+    - client auth
+  issuerRef:
+    name: opensearch-ca-issuer
+    kind: Issuer
+---
+# opensearch.yml próprio, com o plugin de segurança apontando pros certs
+# acima. Substitui inteiramente o opensearch.yml default da imagem (só 12
+# linhas, sem nada de plugins.security.* — quem preenchia isso em runtime
+# era o install_demo_configuration.sh, agora desabilitado). Settings
+# validados manualmente num pod descartável antes de aplicar aqui.
+#
+# allow_default_init_securityindex fica true só como rede de segurança
+# pro caso de o índice .opendistro_security nunca ter sido inicializado
+# (cluster novo) — no Revoada de hoje, esse índice já existe (criado pelo
+# install_demo_configuration.sh original, 8+ dias atrás, com a senha do
+# admin já correta vinda de OPENSEARCH_INITIAL_ADMIN_PASSWORD) e essa
+# opção não tem efeito nenhum: o auto-init só roda se o índice não
+# existir, então usuários/roles/senha continuam os mesmos de sempre.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opensearch-config
+  namespace: querido-diario
+data:
+  opensearch.yml: |
+    cluster.name: docker-cluster
+    network.host: 0.0.0.0
+    node.max_local_storage_nodes: 3
+    discovery.type: single-node
+
+    plugins.security.ssl.transport.pemcert_filepath: esnode.pem
+    plugins.security.ssl.transport.pemkey_filepath: esnode-key.pem
+    plugins.security.ssl.transport.pemtrustedcas_filepath: root-ca.pem
+    plugins.security.ssl.transport.enforce_hostname_verification: false
+    plugins.security.ssl.http.enabled: true
+    plugins.security.ssl.http.pemcert_filepath: esnode.pem
+    plugins.security.ssl.http.pemkey_filepath: esnode-key.pem
+    plugins.security.ssl.http.pemtrustedcas_filepath: root-ca.pem
+    plugins.security.allow_unsafe_democertificates: false
+    plugins.security.allow_default_init_securityindex: true
+    plugins.security.authcz.admin_dn:
+      - CN=opensearch.querido-diario.svc.cluster.local
+    plugins.security.audit.type: internal_opensearch
+    plugins.security.enable_snapshot_restore_privilege: true
+    plugins.security.check_snapshot_restore_write_privileges: true
+    plugins.security.restapi.roles_enabled: ["all_access", "security_rest_api_access"]
+    plugins.security.system_indices.enabled: true

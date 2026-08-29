@@ -7,6 +7,8 @@ resources:
   - certificates.yaml
   # OpenSearch single-node dentro do cluster (ver ADR-008)
   - opensearch/statefulset.yaml
+  # CA interna + certificado de servidor (cert-manager) pro TLS do OpenSearch
+  - opensearch/certs.yaml
 
 # Defina as imagens com tags fixas para produção (evite :latest)
 images:
@@ -74,6 +76,52 @@ patches:
     target:
       kind: Cluster
       name: postgres
+
+  # ── API: confiar na CA interna do OpenSearch (cert-manager) ────────────────
+  # opensearch-py usa o bundle do certifi (não o trust store do SO), então
+  # SSL_CERT_FILE não tem efeito — a única forma de confiar no certificado do
+  # OpenSearch (emitido em opensearch/certs.yaml) sem alterar código da
+  # aplicação é injetar a CA no próprio arquivo cacert.pem do certifi antes
+  # do processo principal subir. Só produção: dev roda OpenSearch sem TLS
+  # (DISABLE_SECURITY_PLUGIN=true), não existe o secret opensearch-server-tls.
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/initContainers
+        value:
+          - name: trust-opensearch-ca
+            image: ghcr.io/okfn-brasil/querido-diario-api:v0.22.8
+            command:
+              - sh
+              - -c
+              - |
+                set -e
+                cp "$(python3 -c 'import certifi; print(certifi.where())')" /shared/cacert.pem
+                cat /opensearch-ca/ca.crt >> /shared/cacert.pem
+            volumeMounts:
+              - name: certifi-bundle
+                mountPath: /shared
+              - name: opensearch-ca
+                mountPath: /opensearch-ca
+      - op: add
+        path: /spec/template/spec/volumes
+        value:
+          - name: certifi-bundle
+            emptyDir: {}
+          - name: opensearch-ca
+            secret:
+              secretName: opensearch-server-tls
+              items:
+                - key: ca.crt
+                  path: ca.crt
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts
+        value:
+          - name: certifi-bundle
+            mountPath: /usr/local/lib/python3.12/site-packages/certifi/cacert.pem
+            subPath: cacert.pem
+    target:
+      kind: Deployment
+      name: api
 
   # ── StorageClass Ceph para volumes persistentes ────────────────────────────
   - patch: |-
