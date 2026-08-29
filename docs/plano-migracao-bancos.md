@@ -17,10 +17,23 @@ efetivamente no ar. Causas raiz (todas já corrigidas no repo):
 | (latente, não travava boot) `backend` nunca roda migrations Django | `deployment.yaml` só chama `gunicorn`, sem `migrate` (docker-compose antigo tinha `migrate && runserver`, perdido na migração pro k8s) | fix local no `k8s/base/backend/deployment.yaml` (initContainer `migrate`) |
 | PVC do OpenSearch em produção era 20Gi | OpenSearch da VPS antiga tem **~400G** de dados reais — 20Gi nunca teria cabido | fix local no `k8s/overlays/production/opensearch/statefulset.yaml` (450Gi) |
 | Heap do OpenSearch (1GB) insuficiente pra ~400G de índice | `OPENSEARCH_JAVA_OPTS` fixo em `-Xms1g -Xmx1g`, `resources` em 2500Mi/1500Mi | fix local: heap 8g (`-Xms8g -Xmx8g`), `resources.limits.memory: 16Gi` (heap = ~50% da memória do container, regra geral da JVM), `requests.memory: 12Gi`, cpu limit/request `2`/`500m` |
+| `postgres-credentials`/`app-secret`: `role "querido_diario_db_user" does not exist` em loop desde o boot do pod (5+ dias, 1638 tentativas nos logs) | Secret com usuário/senha de antes da migração pro CNPG — o bootstrap real usa owner `admin` (`k8s/base/postgres/cluster.yaml`) | fix manual no cluster: `ALTER USER admin WITH PASSWORD ...` + `postgres-credentials`/`app-secret` recriados com `admin`; commit `62d3149`/`885d719` |
+| `api`: `Failed to resolve 'os.queridodiario.org.br'` | `QUERIDO_DIARIO_OPENSEARCH_HOST` no `app-secret` apontava pra VM externa antiga (pré-ADR-008) | fix manual no `app-secret` pra `https://opensearch.querido-diario.svc.cluster.local:9200` |
+| `backend`: `SystemCheckError` (CSRF_TRUSTED_ORIGINS/CORS_ALLOWED_ORIGINS) | `QD_BACKEND_ALLOWED_ORIGINS`/`QD_BACKEND_CSRF_TRUSTED_ORIGINS` = `"*"`, inválido pro Django 4+/django-cors-headers | commit `62d3149` |
+| `frontend`/`backend`/`api`: domínio errado em toda a config (`.ok.org.br`) | Domínio real é `queridodiario.org.br` (bate com o certificado TLS já emitido) | commit `62d3149` |
+| `backend`: `PermissionError` no `lost+found` do PVC de estáticos | PVC ext4 montado na raiz — `subPath` resolve | commit `6a72ddb` |
+| `backend`: probes `DisallowedHost` | kubelet bate pelo IP do pod, fora de `ALLOWED_HOSTS` — `httpHeaders` força um Host permitido | commit `6a72ddb` |
+| `api`: `CERTIFICATE_VERIFY_FAILED` contra o OpenSearch | OpenSearch usava certs demo autoassinados da imagem; `opensearch-py` usa o bundle do `certifi`, não o trust store do SO | CA própria via cert-manager + `opensearch.yml` custom + initContainer que confia a CA no `certifi` da API — commit `eb1ffb8` |
+| `api`: `AuthenticationException(401)` contra o OpenSearch | `QUERIDO_DIARIO_OPENSEARCH_USER` no `app-secret` era `querido-diario-user` (role inexistente) — só `admin` existe | fix manual no `app-secret` pra `admin` |
 
 Também existe `scripts/check_secret_refs.py` (CI) pra pegar a classe de bug
 "chave referenciada num manifesto mas nunca provida no secret" antes de
 chegar em produção de novo.
+
+**Estado atual (2026-08-29): `postgres`, `backend`, `api`, `celery-beat` saudáveis.**
+`celery-worker` ainda em CrashLoopBackOff/OOMKilled (concurrency=96 prefork
+estourando o limite de memória do container) — bug separado, não bloqueia a
+migração, ainda não resolvido.
 
 ## Estado atual (checklist)
 
@@ -33,11 +46,22 @@ chegar em produção de novo.
       (`queridodiario-tls`), IngressRoutes, secrets existentes (serão
       recriados pelo CI)
 - [x] OpenSearch redimensionado pra ~400G reais (450Gi de storage, 16Gi de
-      memória/8Gi de heap) — só terá efeito quando o StatefulSet for
-      recriado (passo de deploy abaixo)
-- [ ] Push dos commits pendentes (segurando até as variáveis do CI/GitHub
-      Secrets serem revisadas — ver `scripts/secrets.txt.example`)
-- [ ] Dump/restore do Postgres (VPS antiga → Revoada)
+      memória/8Gi de heap)
+- [x] `postgres`, `backend`, `api` rodando saudáveis em produção (ver tabela
+      de causas acima) — validado manualmente no cluster, commits locais
+      ainda não enviados
+- [x] TLS próprio do OpenSearch via cert-manager, API confiando na CA
+- [ ] `celery-worker` em CrashLoopBackOff/OOMKilled — resolver antes do
+      cutover final (não bloqueia o restore do Postgres)
+- [ ] Push dos commits pendentes — **antes de dar push**, sincronizar
+      `scripts/secrets.txt` (local, gitignored) com os valores corrigidos
+      manualmente no cluster (`POSTGRES_USERNAME=admin`,
+      `OPENSEARCH_HOST=https://opensearch.querido-diario.svc.cluster.local:9200`)
+      e rodar `python3 scripts/load_secrets.py`, senão o próximo deploy do
+      CI reverte os fixes manuais
+- [ ] Dump/restore do Postgres (VPS antiga → Revoada) — Fase 0 do
+      `scripts/db-migration/00-setup-vps.md` precisa rodar na VPS antiga
+      (WireGuard, kubectl, credenciais `OLD_PG_*`), fora do alcance daqui
 - [ ] Migração do índice OpenSearch (VPS antiga → Revoada)
 - [ ] Deploy da aplicação (api/backend/celery/data-processing) — **depois**
       do restore, não antes (ver ordem abaixo)
