@@ -24,6 +24,12 @@ spec:
             - worker
             - -l
             - INFO
+            # Sem --concurrency, o celery usa multiprocessing.cpu_count()
+            # (o node inteiro, ex: 96) como número de processos prefork —
+            # explodia o limite de memória em segundos (OOMKilled, exit 137,
+            # ~2s após o start). Tarefas leves (alerts.tasks.*), não precisa
+            # de mais que isso.
+            - --concurrency=2
           envFrom:
             - configMapRef:
                 name: app-config
