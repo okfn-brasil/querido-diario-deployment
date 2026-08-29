@@ -117,12 +117,15 @@ info "Aguardando pod auxiliar ficar pronto..."
 kubectl wait --for=condition=Ready "pod/$HELPER_POD" -n "$NAMESPACE" --timeout=60s >/dev/null
 
 info "Copiando opensearch-migrate.py -> pod auxiliar:/checkpoint/ (checkpoint fica no mesmo diretório, no PVC persistente)"
-run "kubectl cp do opensearch-migrate.py" \
-    kubectl cp --retries=5 "$SCRIPT_DIR/opensearch-migrate.py" "$NAMESPACE/$HELPER_POD:/checkpoint/opensearch-migrate.py"
+# Passos de setup (cp, pip install) sempre rodam de verdade — não usam
+# run()/DRY_RUN daqui: DRY_RUN neste script controla só a flag --dry-run
+# do opensearch-migrate.py (que só conta documentos), não os passos de
+# preparo do pod, que são seguros e precisam rodar mesmo assim pra
+# validar o mecanismo.
+kubectl cp --retries=5 "$SCRIPT_DIR/opensearch-migrate.py" "$NAMESPACE/$HELPER_POD:/checkpoint/opensearch-migrate.py"
 
 info "Instalando opensearch-py no pod auxiliar..."
-run "pip install opensearch-py" \
-    kubectl exec "$HELPER_POD" -n "$NAMESPACE" -- pip install --quiet opensearch-py
+kubectl exec "$HELPER_POD" -n "$NAMESPACE" -- pip install --quiet opensearch-py
 
 DRY_RUN_FLAG=""
 [ "${DRY_RUN:-false}" = "true" ] && DRY_RUN_FLAG="--dry-run"
