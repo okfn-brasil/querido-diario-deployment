@@ -1,5 +1,5 @@
 ---
-# queridodiario.ok.org.br → frontend (HTTPS)
+# queridodiario.org.br → frontend (HTTPS)
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -9,7 +9,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`queridodiario.ok.org.br`)
+    - match: Host(`queridodiario.org.br`)
       kind: Rule
       priority: 10
       middlewares:
@@ -18,7 +18,7 @@ spec:
       services:
         - name: frontend
           port: 80
-    - match: Host(`www.queridodiario.ok.org.br`)
+    - match: Host(`www.queridodiario.org.br`)
       kind: Rule
       priority: 200
       middlewares:
@@ -29,7 +29,7 @@ spec:
   tls:
     certResolver: leresolver
 ---
-# HTTP → HTTPS redirect para queridodiario.ok.org.br
+# HTTP → HTTPS redirect para queridodiario.org.br
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -39,7 +39,7 @@ spec:
   entryPoints:
     - web
   routes:
-    - match: Host(`queridodiario.ok.org.br`) || Host(`www.queridodiario.ok.org.br`)
+    - match: Host(`queridodiario.org.br`) || Host(`www.queridodiario.org.br`)
       kind: Rule
       middlewares:
         - name: redirect-to-https

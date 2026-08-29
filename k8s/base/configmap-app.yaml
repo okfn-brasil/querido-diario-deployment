@@ -6,7 +6,7 @@ metadata:
   namespace: querido-diario
 data:
   # Domain
-  DOMAIN: "queridodiario.ok.org.br"
+  DOMAIN: "queridodiario.org.br"
 
   # API
   # LOG_LEVEL alimenta uvicorn.run(log_level=...) em main/__main__.py da API
@@ -54,18 +54,22 @@ data:
   # Backend / Celery
   QD_BACKEND_DEBUG: "False"
   DJANGO_SETTINGS_MODULE: "config.settings"
-  QD_BACKEND_ALLOWED_HOSTS: "backend-api.queridodiario.ok.org.br,api.queridodiario.ok.org.br,queridodiario.ok.org.br"
-  QD_BACKEND_ALLOWED_ORIGINS: "*"
+  QD_BACKEND_ALLOWED_HOSTS: "backend-api.queridodiario.org.br,api.queridodiario.org.br,queridodiario.org.br"
+  # CORS_ALLOWED_ORIGINS/CSRF_TRUSTED_ORIGINS (django-cors-headers/Django 4+)
+  # não aceitam "*" — precisam de origens completas com esquema. Usar "*"
+  # aqui derruba o backend inteiro (initContainer de migrate nunca passa do
+  # SystemCheckError). Manter em sincronia com QD_BACKEND_ALLOWED_HOSTS acima.
+  QD_BACKEND_ALLOWED_ORIGINS: "https://backend-api.queridodiario.org.br,https://api.queridodiario.org.br,https://queridodiario.org.br"
   QD_BACKEND_ALLOWED_ORIGIN_REGEXES: ""
-  QD_BACKEND_CSRF_TRUSTED_ORIGINS: "*"
+  QD_BACKEND_CSRF_TRUSTED_ORIGINS: "https://backend-api.queridodiario.org.br,https://api.queridodiario.org.br,https://queridodiario.org.br"
   QD_API_THEME: "Tecnologias%20na%20Educação"
-  QD_API_URL: "https://api.queridodiario.ok.org.br"
+  QD_API_URL: "https://api.queridodiario.org.br"
   CELERY_BROKER_URL: "redis://redis:6378"
   CELERY_RESULT_BACKEND: "redis://redis:6378"
   CELERY_MAX_TASKS_PER_CHILD: "100"
   CELERY_WORKER_PREFETCH_MULTIPLIER: "1"
-  STATIC_URL: "https://backend-api.queridodiario.ok.org.br/api/static/"
-  FRONT_BASE_URL: "https://queridodiario.ok.org.br"
+  STATIC_URL: "https://backend-api.queridodiario.org.br/api/static/"
+  FRONT_BASE_URL: "https://queridodiario.org.br"
   PROJECT_TITLE: "Querido Diário"
   ALERT_HOUR: "8"
   ALERT_MINUTE: "0"
