@@ -81,8 +81,18 @@ for entry in "${DATABASES[@]}"; do
     fi
 
     info "Copiando $dump_file -> pod auxiliar:/tmp/${old_db}.dump"
+    # --retries: kubectl (1.23+) reexecuta a cópia automaticamente se a
+    # conexão cair no meio (mesma classe de instabilidade de rede que já
+    # derrubou um restore via port-forward antes).
     run "kubectl cp do dump de $new_db" \
-        kubectl cp "$dump_file" "$NAMESPACE/$HELPER_POD:/tmp/${old_db}.dump"
+        kubectl cp --retries=5 "$dump_file" "$NAMESPACE/$HELPER_POD:/tmp/${old_db}.dump"
+
+    if [ "$DRY_RUN" != "true" ]; then
+        expected_size=$(stat -c%s "$dump_file" 2>/dev/null || stat -f%z "$dump_file")
+        transferred_size=$(kubectl exec "$HELPER_POD" -n "$NAMESPACE" -- stat -c%s "/tmp/${old_db}.dump" 2>/dev/null || echo "0")
+        [ "$transferred_size" = "$expected_size" ] || err "kubectl cp não transferiu o arquivo por completo: local=${expected_size} bytes, pod=${transferred_size} bytes. Rede instável durante a cópia — rode de novo (kubectl cp não é resumível; se falhar de novo, considere investigar a VPN/CNI ou copiar com 'kubectl cp --retries')."
+        log "kubectl cp OK: $expected_size bytes transferidos."
+    fi
 
     info "Restaurando /tmp/${old_db}.dump -> banco '$new_db' (conexão interna ao cluster, sem port-forward)"
     run "pg_restore em $new_db" \
