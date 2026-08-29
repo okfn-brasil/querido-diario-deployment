@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # 03-verify-postgres.sh — compara contagem de linhas entre o dump de origem
 # (via docker exec no container antigo) e o banco restaurado no Revoada
-# (via kubectl port-forward). Gate formal antes do cutover de DNS.
+# (via um pod auxiliar dentro do cluster, mesma abordagem de
+# 02-restore-postgres.sh — evita depender de kubectl port-forward). Gate
+# formal antes do cutover de DNS.
 #
 # Uso:
 #   ./03-verify-postgres.sh
@@ -15,7 +17,8 @@ source "$SCRIPT_DIR/lib.sh"
 
 NAMESPACE="${QD_NAMESPACE:-querido-diario}"
 PG_SVC="${QD_PG_SERVICE:-postgres-rw}"
-LOCAL_PORT="${QD_PG_LOCAL_PORT:-5433}"
+HELPER_POD="${QD_RESTORE_HELPER_POD:-pg-verify-helper}"
+HELPER_IMAGE="${QD_RESTORE_HELPER_IMAGE:-postgres:15}"
 
 # container:old_db:new_db:user_env_suffix:tabelas (separadas por espaço)
 CHECKS=(
@@ -25,20 +28,20 @@ CHECKS=(
 )
 
 command -v kubectl >/dev/null 2>&1 || err "kubectl não encontrado."
-command -v psql >/dev/null 2>&1 || err "psql não encontrado (apt install postgresql-client)."
 
 PG_USER=$(kubectl get secret postgres-credentials -n "$NAMESPACE" -o jsonpath='{.data.username}' | base64 -d)
 PG_PASSWORD=$(kubectl get secret postgres-credentials -n "$NAMESPACE" -o jsonpath='{.data.password}' | base64 -d)
-export PGPASSWORD="$PG_PASSWORD"
+[ -n "$PG_USER" ] && [ -n "$PG_PASSWORD" ] || err "Não consegui ler usuário/senha do secret postgres-credentials."
 
-info "Abrindo port-forward $PG_SVC -> localhost:$LOCAL_PORT ..."
-kubectl port-forward "svc/$PG_SVC" "$LOCAL_PORT:5432" -n "$NAMESPACE" >/tmp/qd-pg-port-forward.log 2>&1 &
-PF_PID=$!
-trap 'kill $PF_PID 2>/dev/null || true' EXIT
-for _ in $(seq 1 20); do
-    psql -h localhost -p "$LOCAL_PORT" -U "$PG_USER" -d postgres -tAc 'SELECT 1;' >/dev/null 2>&1 && break
-    sleep 1
-done
+cleanup() {
+    kubectl delete pod "$HELPER_POD" -n "$NAMESPACE" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+info "Subindo pod auxiliar ($HELPER_POD) dentro do cluster..."
+kubectl run "$HELPER_POD" -n "$NAMESPACE" --image="$HELPER_IMAGE" --restart=Never \
+    --command -- sleep 600 >/dev/null
+kubectl wait --for=condition=Ready "pod/$HELPER_POD" -n "$NAMESPACE" --timeout=60s >/dev/null
 
 FAILED=0
 
@@ -57,7 +60,8 @@ for entry in "${CHECKS[@]}"; do
     for t in $tables; do
         old_count=$(docker exec -e PGPASSWORD="$old_pass" "$container" \
             psql -U "$old_user" -d "$old_db" -tAc "SELECT count(*) FROM $t;" 2>/dev/null | tr -d '[:space:]')
-        new_count=$(psql -h localhost -p "$LOCAL_PORT" -U "$PG_USER" -d "$new_db" \
+        new_count=$(kubectl exec "$HELPER_POD" -n "$NAMESPACE" -- env PGPASSWORD="$PG_PASSWORD" \
+            psql -h "$PG_SVC" -U "$PG_USER" -d "$new_db" \
             -tAc "SELECT count(*) FROM $t;" 2>/dev/null | tr -d '[:space:]')
 
         if [ "$old_count" = "$new_count" ]; then
