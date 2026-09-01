@@ -161,6 +161,17 @@ patches:
       - op: replace
         path: /data/FRONT_BASE_URL
         value: https://queridodiario.org.br
+      # Reescreve dinamicamente as URLs de arquivo antigas (armazenadas como
+      # URL absoluta no campo file_raw_txt do OpenSearch, herdadas de antes da
+      # migração de storage — ver docs/storage-migration-cloudfront.md) para o
+      # domínio atual, sem precisar reprocessar os ~928 mil documentos
+      # afetados. Lógica em querido-diario-api/utils/url_builder.py.
+      - op: replace
+        path: /data/REPLACE_FILE_URL_BASE
+        value: "True"
+      - op: replace
+        path: /data/QUERIDO_DIARIO_FILES_ENDPOINT
+        value: data.queridodiario.ok.org.br
     target:
       kind: ConfigMap
       name: app-config
