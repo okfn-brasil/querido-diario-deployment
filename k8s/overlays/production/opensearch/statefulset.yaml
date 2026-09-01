@@ -78,18 +78,31 @@ spec:
             requests:
               memory: 12Gi
               cpu: "500m"
+          # Liveness só verifica se o processo está respondendo (qualquer
+          # resposta HTTP), não o status do cluster — "red" é normal e
+          # esperado por vários minutos após um restart, enquanto os shards
+          # são recuperados do disco (single-node, sem réplicas). Usar
+          # status do cluster aqui já causou um crash loop real: o probe
+          # matava o pod repetidamente antes da recuperação terminar,
+          # reiniciando a recuperação do zero a cada vez, indefinidamente.
           livenessProbe:
             exec:
               command:
                 - sh
                 - -c
                 - >-
-                  curl -sk -u "admin:$OPENSEARCH_INITIAL_ADMIN_PASSWORD"
-                  https://localhost:9200/_cluster/health
-                  | grep -qv '"status":"red"'
-            initialDelaySeconds: 90
+                  curl -sk -o /dev/null -w '%{http_code}'
+                  -u "admin:$OPENSEARCH_INITIAL_ADMIN_PASSWORD"
+                  https://localhost:9200/
+                  | grep -q '^200$'
+            initialDelaySeconds: 120
             periodSeconds: 30
             timeoutSeconds: 10
+            failureThreshold: 10
+          # Readiness pode continuar exigindo não-red (só tira do Service
+          # até os dados ficarem disponíveis) — falha de readiness não mata
+          # o pod, só remove dos endpoints, então é seguro ser mais rígido
+          # aqui.
           readinessProbe:
             exec:
               command:
@@ -102,6 +115,7 @@ spec:
             initialDelaySeconds: 45
             periodSeconds: 10
             timeoutSeconds: 10
+            failureThreshold: 30
           volumeMounts:
             - name: opensearch-data
               mountPath: /usr/share/opensearch/data
