@@ -105,6 +105,12 @@ data:
     network.host: 0.0.0.0
     node.max_local_storage_nodes: 3
     discovery.type: single-node
+    # Default (100mb) é baixo demais para alguns documentos do índice
+    # queridodiario (texto extraído de diários grandes) — a migração do
+    # OpenSearch falhava com 413 (Request Entity Too Large) mesmo com bulk
+    # chunk_size=50. É setting estático (não dá pra mudar via cluster
+    # settings API em runtime), precisa estar aqui + restart do nó.
+    http.max_content_length: 500mb
 
     plugins.security.ssl.transport.pemcert_filepath: esnode.pem
     plugins.security.ssl.transport.pemkey_filepath: esnode-key.pem
