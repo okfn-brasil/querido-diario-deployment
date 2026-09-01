@@ -138,6 +138,29 @@ spec:
         - name: opensearch-certs
           secret:
             secretName: opensearch-server-tls
+  # ATENÇÃO: em produção hoje (Revoada), o pod usa um PVC criado manualmente
+  # ("opensearch-data-v2", 400Gi) referenciado direto via `volumes:` no pod
+  # template — não este volumeClaimTemplates. Isso porque volumeClaimTemplates
+  # é imutável num StatefulSet já existente e não permite reduzir o storage
+  # (era 900Gi antes de uma migração via snapshot/restore pra um PVC menor).
+  # Esse volumeClaimTemplates aqui só é usado num deploy do zero (novo
+  # ambiente, ou local): nesse caso o Kubernetes cria o PVC automaticamente
+  # no tamanho abaixo.
+  #
+  # Resize do PVC em produção hoje: manual, via `kubectl edit pvc
+  # opensearch-data-v2` (ou patch), fora do manifesto — ceph-block-hdd só
+  # suporta expansão online, nunca redução.
+  #
+  # Pra produção voltar a usar volumeClaimTemplates de fato (auto-gerenciado
+  # pelo manifesto): não dá pra fazer via `kubectl apply` simples (o mesmo
+  # erro de imutabilidade acima se aplica). É preciso repetir o processo de
+  # migração manual: 1) snapshot/restore do índice pra um PVC novo cujo nome
+  # siga o padrão que o volumeClaimTemplates geraria
+  # (`opensearch-data-opensearch-0`) — ou aceitar que o StatefulSet vai
+  # provisionar um PVC vazio com esse nome; 2) deletar e recriar o objeto
+  # StatefulSet (delete não apaga PVCs) já sem o `volumes:` explícito, só com
+  # este volumeClaimTemplates; 3) verificar que o pod voltou saudável e com
+  # os dados corretos antes de apagar o PVC "opensearch-data-v2" antigo.
   volumeClaimTemplates:
     - metadata:
         name: opensearch-data
@@ -147,9 +170,9 @@ spec:
         storageClassName: ceph-block-hdd
         resources:
           requests:
-            # ~400G de dados reais (migração da VPS antiga) + margem sob os
-            # watermarks de disco do OpenSearch (85%/90%/95%).
-            storage: 450Gi
+            # ~275G de dados reais + margem sob os watermarks de disco do
+            # OpenSearch (85%/90%/95%).
+            storage: 400Gi
 ---
 apiVersion: v1
 kind: Service
