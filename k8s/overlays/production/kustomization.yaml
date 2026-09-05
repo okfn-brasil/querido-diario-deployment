@@ -54,7 +54,7 @@ patches:
         value: 3
       - op: replace
         path: /spec/storage/size
-        value: 100Gi
+        value: 250Gi
       - op: add
         path: /spec/storage/storageClass
         value: ceph-block-hdd
