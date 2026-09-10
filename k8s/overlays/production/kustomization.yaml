@@ -14,6 +14,8 @@ resources:
 images:
   - name: ghcr.io/okfn-brasil/querido-diario-api
     newTag: "v0.22.9"
+  - name: ghcr.io/okfn-brasil/querido-diario-frontend
+    newTag: "6d5e2bc"
   - name: ghcr.io/okfn-brasil/querido-diario-backend
     newTag: "latest"
   - name: ghcr.io/okfn-brasil/querido-diario-data-processing
