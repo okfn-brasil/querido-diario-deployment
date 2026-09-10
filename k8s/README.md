@@ -24,7 +24,7 @@ k8s/
 │   ├── celery-worker/
 │   └── data-processing/
 ├── overlays/
-│   ├── production/              # 2+ réplicas, 100Gi postgres, imagens fixas
+│   ├── production/              # 2+ réplicas, 250Gi postgres, imagens fixas
 │   └── dev/                     # kind local: infra embutida, limites menores
 │       └── infra/
 │           ├── postgres-credentials-dev.yaml
