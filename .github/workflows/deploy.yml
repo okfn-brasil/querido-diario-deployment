@@ -59,10 +59,20 @@ jobs:
       # cluster (já aconteceu com o endpointCA do backup do Postgres).
 
       - name: Prepara overlay production-local
+        # Os secrets são passados via `env:` (não interpolados direto no
+        # `run:`) de propósito: `echo "${{ secrets.X }}" > arquivo` faz o
+        # GitHub Actions colar o texto do secret cru dentro do script antes
+        # do bash processar — qualquer `$(...)`, aspas ou `*` no conteúdo
+        # (ex: o "*/2 * * *" do schedule de um CronJob) é reinterpretado pelo
+        # shell (glob expansion etc), corrompendo o YAML. Como valor de env
+        # var, o conteúdo chega intacto e "$VAR" só faz expansão de variável.
+        env:
+          KUSTOMIZATION_PROD_LOCAL: ${{ secrets.KUSTOMIZATION_PROD_LOCAL }}
+          POSTGRES_BACKUP_CA_REFRESH_MANIFEST: ${{ secrets.POSTGRES_BACKUP_CA_REFRESH_MANIFEST }}
         run: |
           mkdir -p k8s/overlays/production-local
-          echo "${{ secrets.KUSTOMIZATION_PROD_LOCAL }}" > k8s/overlays/production-local/kustomization.yaml
-          echo "${{ secrets.POSTGRES_BACKUP_CA_REFRESH_MANIFEST }}" > k8s/overlays/production-local/postgres-backup-ca-refresh.yaml
+          printf '%s' "$KUSTOMIZATION_PROD_LOCAL" > k8s/overlays/production-local/kustomization.yaml
+          printf '%s' "$POSTGRES_BACKUP_CA_REFRESH_MANIFEST" > k8s/overlays/production-local/postgres-backup-ca-refresh.yaml
 
       # ── Secrets do cluster (idempotente via --dry-run | apply) ─────────────
 
