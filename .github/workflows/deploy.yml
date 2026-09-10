@@ -52,12 +52,17 @@ jobs:
 
       # ── Overlay production-local ───────────────────────────────────────────
       # O overlay production-local/ é gitignored (contém endpoints internos).
-      # O conteúdo do kustomization.yaml é armazenado como GitHub Secret.
+      # O conteúdo de cada arquivo é armazenado como GitHub Secret. Sempre que
+      # esses arquivos forem alterados localmente, os secrets precisam ser
+      # atualizados (gh secret set NOME < arquivo) — do contrário o próximo
+      # deploy reverte silenciosamente qualquer mudança feita direto no
+      # cluster (já aconteceu com o endpointCA do backup do Postgres).
 
       - name: Prepara overlay production-local
         run: |
           mkdir -p k8s/overlays/production-local
           echo "${{ secrets.KUSTOMIZATION_PROD_LOCAL }}" > k8s/overlays/production-local/kustomization.yaml
+          echo "${{ secrets.POSTGRES_BACKUP_CA_REFRESH_MANIFEST }}" > k8s/overlays/production-local/postgres-backup-ca-refresh.yaml
 
       # ── Secrets do cluster (idempotente via --dry-run | apply) ─────────────
 
@@ -135,7 +140,24 @@ jobs:
         run: kubectl diff -k k8s/overlays/production-local || true
 
       - name: Aplica overlay de produção
-        run: kubectl apply -k k8s/overlays/production-local
+        run: |
+          set -o pipefail
+          if ! kubectl apply -k k8s/overlays/production-local 2>&1 | tee /tmp/apply.log; then
+            # Divergência conhecida e aceita em produção: o StatefulSet do
+            # opensearch usa um PVC referenciado manualmente via `volumes:`
+            # (não volumeClaimTemplates, que é imutável e não reconcilia via
+            # apply comum) — ver
+            # k8s/overlays/production/opensearch/statefulset.yaml. Tolera
+            # SOMENTE esse erro específico; qualquer outra falha de apply
+            # continua quebrando o deploy.
+            FAIL_LINES=$(grep -E '(is invalid:|^error:|Error from server)' /tmp/apply.log || true)
+            if [ -n "$FAIL_LINES" ] && ! echo "$FAIL_LINES" | grep -qv 'StatefulSet "opensearch"'; then
+              echo "::warning::Ignorando falha conhecida no StatefulSet opensearch (volumeClaimTemplates imutável, produção usa PVC manual — ver k8s/overlays/production/opensearch/statefulset.yaml)"
+            else
+              echo "$FAIL_LINES"
+              exit 1
+            fi
+          fi
 
       - name: Aguarda rollout
         run: |
