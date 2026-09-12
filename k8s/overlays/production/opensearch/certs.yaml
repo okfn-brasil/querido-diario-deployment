@@ -87,13 +87,17 @@ spec:
 # era o install_demo_configuration.sh, agora desabilitado). Settings
 # validados manualmente num pod descartável antes de aplicar aqui.
 #
-# allow_default_init_securityindex fica true só como rede de segurança
-# pro caso de o índice .opendistro_security nunca ter sido inicializado
-# (cluster novo) — no Revoada de hoje, esse índice já existe (criado pelo
-# install_demo_configuration.sh original, 8+ dias atrás, com a senha do
-# admin já correta vinda de OPENSEARCH_INITIAL_ADMIN_PASSWORD) e essa
-# opção não tem efeito nenhum: o auto-init só roda se o índice não
-# existir, então usuários/roles/senha continuam os mesmos de sempre.
+# allow_default_init_securityindex fica true pra o índice .opendistro_security
+# ser criado sozinho quando não existe (cluster/volume novo) — mas como
+# DISABLE_INSTALL_DEMO_CONFIG=true pula o install_demo_configuration.sh,
+# esse auto-init cria o usuário "admin" com a senha DEMO padrão
+# ("admin"/"admin"), não com OPENSEARCH_INITIAL_ADMIN_PASSWORD (quem faria
+# essa substituição é justamente o instalador desabilitado). Confirmado na
+# migração de storage de 2026-09-11/12 (snapshot/restore pra
+# volumeClaimTemplates, ver ADR-002): num volume vazio, só depois do boot é
+# preciso corrigir a senha via `securityadmin.sh` (autenticação por
+# certificado, já que a API REST bloqueia mudar a senha do usuário "admin"
+# por ele ser "reserved"). Ver adrs/ para o passo a passo.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -129,3 +133,7 @@ data:
     plugins.security.check_snapshot_restore_write_privileges: true
     plugins.security.restapi.roles_enabled: ["all_access", "security_rest_api_access"]
     plugins.security.system_indices.enabled: true
+    # Repositório fs de snapshot (ver PVC "opensearch-snapshot-repo" em
+    # statefulset.yaml) — precisa ser um setting estático (não dá pra
+    # registrar um repo fs fora dessa lista via API em runtime).
+    path.repo: ["/usr/share/opensearch/snapshots"]
