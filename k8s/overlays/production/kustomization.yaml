@@ -125,6 +125,50 @@ patches:
       kind: Deployment
       name: api
 
+  # ── data-processing: confiar na CA interna do OpenSearch (cert-manager) ────
+  # Mesmo motivo do patch acima (API) — o CronJob data-processing também fala
+  # com o OpenSearch via opensearch-py e precisa da mesma CA no bundle do
+  # certifi. Reaproveita a própria imagem do data-processing no initContainer
+  # (python3.14, caminho do certifi diferente do da API que é python3.12).
+  - patch: |-
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/initContainers
+        value:
+          - name: trust-opensearch-ca
+            image: ghcr.io/okfn-brasil/querido-diario-data-processing:latest
+            command:
+              - sh
+              - -c
+              - |
+                set -e
+                cp "$(python3 -c 'import certifi; print(certifi.where())')" /shared/cacert.pem
+                cat /opensearch-ca/ca.crt >> /shared/cacert.pem
+            volumeMounts:
+              - name: certifi-bundle
+                mountPath: /shared
+              - name: opensearch-ca
+                mountPath: /opensearch-ca
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/volumes
+        value:
+          - name: certifi-bundle
+            emptyDir: {}
+          - name: opensearch-ca
+            secret:
+              secretName: opensearch-server-tls
+              items:
+                - key: ca.crt
+                  path: ca.crt
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/containers/0/volumeMounts
+        value:
+          - name: certifi-bundle
+            mountPath: /usr/local/lib/python3.14/site-packages/certifi/cacert.pem
+            subPath: cacert.pem
+    target:
+      kind: CronJob
+      name: data-processing
+
   # ── StorageClass Ceph para volumes persistentes ────────────────────────────
   - patch: |-
       - op: add
