@@ -74,3 +74,87 @@ o fallback é configurar `vm.max_map_count=262144` diretamente nos nodes do Revo
   serviços (bump de tag de imagem no manifesto).
 - `QUERIDO_DIARIO_OPENSEARCH_HOST` no secret de produção aponta para o serviço
   interno: `https://opensearch.querido-diario.svc.cluster.local:9200`.
+
+## Atualização — Migração de storage e resources (2026-09-11/12)
+
+Em produção, o PVC de dados havia divergido do `volumeClaimTemplates` do
+manifesto por conta de uma migração manual anterior (ver histórico do
+`statefulset.yaml`): o `StatefulSet` ao vivo referenciava um PVC
+(`opensearch-data-v2`) direto via `volumes:`, porque `volumeClaimTemplates` é
+imutável num `StatefulSet` já existente. Isso quebrava todo `kubectl apply -k`
+do overlay de produção nesse recurso (erro `Forbidden: updates to statefulset
+spec...`), embora sem impedir os outros recursos de aplicarem.
+
+Reconciliado via snapshot/restore:
+
+1. Provisionado um PVC dedicado (`opensearch-snapshot-repo`, 300Gi,
+   **`ceph-block-nvme`**, não `ceph-block-hdd` — snapshot/restore é I/O-bound e
+   SSD reduz bastante o tempo) como repositório `fs` do OpenSearch
+   (`path.repo` no `opensearch.yml`).
+2. Snapshot completo do índice (~275G, 23 shards) — **~2h** em HDD (dado de
+   origem) mesmo escrevendo em SSD (o gargalo foi a leitura do
+   `opensearch-data-v2`, que ficou em `ceph-block-hdd`).
+3. `StatefulSet` deletado (não afeta PVCs) e recriado usando o
+   `volumeClaimTemplates` do manifesto — provisionou um PVC novo e vazio
+   (`opensearch-data-opensearch-0`, nome no padrão
+   `<template>-<statefulset>-<ordinal>`).
+4. Restore **só do índice `queridodiario`** (`include_global_state: false`,
+   `indices: "queridodiario"`) — os índices internos
+   (`.opendistro_security`, `security-auditlog-*`, `top_queries-*`, etc.)
+   foram deixados de fora de propósito, pra não sobrescrever a config de
+   segurança recém-inicializada no cluster novo. Restore do shard único
+   (`pri: 1, rep: 0`) é sequencial, não paralelo como o snapshot — levou mais
+   tempo que o esperado mesmo em SSD.
+5. Verificado: `274.8gb`/`991584 docs`, idêntico ao volume antigo antes de
+   apagar `opensearch-data-v2`.
+
+Também aumentados os recursos do container (`2 CPU/16Gi` → `4 CPU/24Gi`
+limits, `500m/12Gi` → `1 CPU/16Gi` requests) — mais memória disponível pro
+page cache do SO ajuda em cargas I/O-bound como snapshot/restore, além do
+uso normal de indexação/busca.
+
+### Gotcha: `DISABLE_INSTALL_DEMO_CONFIG=true` + volume de dados vazio = senha demo
+
+Num `StatefulSet` com `plugins.security.allow_default_init_securityindex: true`
+mas `DISABLE_INSTALL_DEMO_CONFIG=true` (nosso caso, ver comentário em
+`certs.yaml`), um **volume de dados vazio** faz o índice
+`.opendistro_security` ser auto-inicializado com o usuário `admin` na senha
+**demo padrão** (`admin`/`admin`) — não com `OPENSEARCH_INITIAL_ADMIN_PASSWORD`,
+porque é o `install_demo_configuration.sh` (desabilitado) quem normalmente
+aplica essa substituição. Isso só aparece na prática quando o volume de
+dados é recriado do zero (como nesta migração) — um cluster que já vem
+rodando há tempo nunca reproduz o problema, porque o índice de segurança já
+existe e não é reinicializado.
+
+**Sintoma:** `AuthenticationException(401)` nos serviços que leem a senha do
+secret (`api`, `backend`, etc.), mas `curl -u admin:admin` autentica.
+
+**Fix:** a API REST bloqueia mudar a senha do usuário `admin` porque ele é
+`reserved` (`{"status":"FORBIDDEN","message":"Resource 'admin' is reserved."}`).
+É preciso usar a ferramenta `securityadmin.sh` (em
+`/usr/share/opensearch/plugins/opensearch-security/tools/`), autenticada por
+certificado cliente (mTLS) casando com `plugins.security.authcz.admin_dn` —
+no nosso caso, o mesmo certificado de servidor (`opensearch-server-tls`)
+serve como certificado de admin, já que o `admin_dn` configurado é o mesmo
+`CN` do certificado do servidor. Passos:
+
+1. A chave do secret `opensearch-server-tls` vem em PKCS#1
+   (`BEGIN RSA PRIVATE KEY`) — `securityadmin.sh` (Java) só aceita PKCS#8
+   (`BEGIN PRIVATE KEY`). Converter com
+   `openssl pkcs8 -topk8 -nocrypt -in tls.key -out key-pkcs8.pem` (a imagem
+   do OpenSearch não tem `openssl`; usar um pod efêmero à parte pra isso).
+2. Em versões recentes do OpenSearch (2.x), `securityadmin.sh` conecta via
+   **porta REST (9200)**, não mais a porta de transporte (9300) — e via
+   `localhost`, não o Service (que só expõe 9200; e tráfego pod-a-pod na
+   9300 parece bloqueado por política de rede no Revoada de qualquer forma).
+3. Gerar o hash da senha: `hash.sh -p "$SENHA"` (usar a env var já montada
+   no pod a partir do secret, nunca a senha em texto puro num argumento
+   solto).
+4. Montar um `internal_users.yml` só com o(s) usuário(s) desejado(s)
+   (`_meta.type: internalusers`) e aplicar com
+   `securityadmin.sh -f internal_users.yml -t internalusers -icl -nhnv -cacert ... -cert ... -key ... -h localhost -p 9200`
+   — isso **substitui inteiramente** a lista de internal users pelo
+   conteúdo do arquivo (não faz merge), então serve também pra remover
+   usuários demo não usados (aproveitado aqui: `logstash`, `kibanaserver`,
+   `kibanaro`, `readall`, `snapshotrestore`, `anomalyadmin` removidos, só
+   `admin` ficou).
