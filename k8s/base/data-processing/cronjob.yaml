@@ -97,12 +97,26 @@ spec:
                     resourceFieldRef:
                       containerName: data-processing
                       resource: limits.memory
+                # OpenBLAS/PyTorch enxergam todos os CPUs do node quando o
+                # container não tem limite de CPU e podem reservar buffers por
+                # thread. Além do consumo desnecessário (o reranking codifica
+                # um excerto por vez), essas reservas contam no RLIMIT_AS e
+                # faziam o processo abortar antes de atingir o limite do cgroup.
+                - name: OPENBLAS_NUM_THREADS
+                  value: "1"
+                - name: OMP_NUM_THREADS
+                  value: "1"
+                - name: MKL_NUM_THREADS
+                  value: "1"
+                - name: NUMEXPR_NUM_THREADS
+                  value: "1"
+                - name: TOKENIZERS_PARALLELISM
+                  value: "false"
               resources:
-                # 6Gi: import de sentence-transformers/transformers/torch (pra
-                # reranking de excertos via embeddings) sozinho já passa de
-                # 2Gi antes de qualquer inferência, mesmo sem carregar lotes
-                # grandes de excertos.
+                # 8Gi: o processo restringe RLIMIT_AS a 75%/90% deste valor.
+                # Com 6Gi, o hard limit de 5.4Gi ainda era insuficiente para as
+                # reservas virtuais do sentence-transformers/PyTorch/OpenBLAS.
                 limits:
-                  memory: 6Gi
+                  memory: 8Gi
                 requests:
                   memory: 1Gi
