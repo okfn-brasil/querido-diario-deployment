@@ -68,11 +68,9 @@ jobs:
         # var, o conteúdo chega intacto e "$VAR" só faz expansão de variável.
         env:
           KUSTOMIZATION_PROD_LOCAL: ${{ secrets.KUSTOMIZATION_PROD_LOCAL }}
-          POSTGRES_BACKUP_CA_REFRESH_MANIFEST: ${{ secrets.POSTGRES_BACKUP_CA_REFRESH_MANIFEST }}
         run: |
           mkdir -p k8s/overlays/production-local
           printf '%s' "$KUSTOMIZATION_PROD_LOCAL" > k8s/overlays/production-local/kustomization.yaml
-          printf '%s' "$POSTGRES_BACKUP_CA_REFRESH_MANIFEST" > k8s/overlays/production-local/postgres-backup-ca-refresh.yaml
 
       # ── Secrets do cluster (idempotente via --dry-run | apply) ─────────────
 
@@ -97,6 +95,17 @@ jobs:
             --from-literal=ACCESS_KEY_ID="$POSTGRES_BACKUP_ACCESS_KEY" \
             --from-literal=SECRET_ACCESS_KEY="$POSTGRES_BACKUP_SECRET_KEY" \
             --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Cria/atualiza secret postgres-backup-ca
+        env:
+          POSTGRES_BACKUP_CA_CRT: ${{ secrets.POSTGRES_BACKUP_CA_CRT }}
+        run: |
+          printf '%s\n' "$POSTGRES_BACKUP_CA_CRT" > /tmp/backup-ca.crt
+          kubectl create secret generic postgres-backup-ca \
+            -n "$NAMESPACE" \
+            --from-file=ca.crt=/tmp/backup-ca.crt \
+            --dry-run=client -o yaml | kubectl apply -f -
+          rm -f /tmp/backup-ca.crt
 
       - name: Cria/atualiza secret app-secret
         env:
