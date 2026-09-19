@@ -46,28 +46,31 @@ do Revoada (`objectstore.ceph.revoada.ime.usp.br`, bucket `okbr-qd-postgres-bkp`
 configurado apenas em `k8s/overlays/production-local/` (gitignored — valores
 reais de infra nunca vão pro git).
 
-**Descoberta:** esse endpoint é servido pelo Traefik compartilhado do
-cluster, sem rota/certificado próprio — por isso responde com o certificado
-*default* autoassinado do Traefik, gerado em memória (troca a cada restart
-do Traefik) e com um SAN que é um hostname interno aleatório, não
-`objectstore.ceph.revoada.ime.usp.br`.
+**Histórico:** o endpoint era servido pelo Traefik compartilhado do cluster,
+sem rota/certificado próprio, e respondia com o certificado *default*
+autoassinado e efêmero do Traefik (SAN aleatório). Isso bloqueava o
+`barman-cloud-backup` (validação estrita de hostname) e o WAL archiving só
+funcionava com um `CronJob` (`postgres-backup-ca-refresh`) que rebuscava o
+certificado a cada 2h.
 
-- **WAL archiving contínuo:** funciona. Contornamos com um secret
-  `postgres-backup-ca` (referenciado via `endpointCA`) mantido atualizado por
-  um `CronJob` (`postgres-backup-ca-refresh`, a cada 2h) que rebusca o
-  certificado atual do endpoint e só atualiza o secret quando ele muda.
-- **Backup completo (base backup):** **ainda não funciona.** O
-  `barman-cloud-backup` faz validação estrita de hostname do certificado
-  (diferente do WAL archiving, que só gera warning) — como o SAN do
-  certificado do Traefik nunca vai bater com o hostname real, isso não é
-  contornável do lado do cliente. **Sem um backup base, o WAL archiving
-  sozinho não permite restore (PITR)** — ou seja, o backup ainda não é
-  utilizável na prática.
-- **Pendente:** pedido aberto ao admin do CCSL para configurar uma rota
-  própria no Traefik (com certificado com SAN correto) para esse host, ou
-  indicar um endpoint que não passe pelo Traefik compartilhado. Ver
-  `k8s/overlays/production-local/DEPLOY.md` (Fase 2/3.3) e
-  `k8s/overlays/production-local/postgres-backup-ca-refresh.yaml`.
+**Resolução (2026-09-19):** o CCSL forneceu uma CA própria do Revoada,
+estável (válida até 2036), e o endpoint passou a apresentar um certificado
+assinado por ela. Ela é o secret `postgres-backup-ca` (chave `ca.crt`,
+referenciado via `endpointCA`), criado pelo passo "Cria/atualiza secret
+postgres-backup-ca" do `deploy.yml` a partir do secret do GitHub
+`POSTGRES_BACKUP_CA_CRT`. O CronJob de refresh foi removido.
+
+- **WAL archiving e backup completo:** funcionando. Um `Backup` manual
+  terminou em `completed`, então há base backup + WAL e o restore (PITR) é
+  utilizável.
+- **Gotcha:** o CNPG copia o `endpointCA` para
+  `/controller/certificates/backup-barman-ca.crt` **só quando o pod sobe** e
+  não recarrega quando o secret muda. Ao trocar a CA é preciso um restart em
+  rolling do cluster
+  (`kubectl annotate cluster postgres kubectl.kubernetes.io/restartedAt=<data>`),
+  senão o arquivamento continua falhando com `CERTIFICATE_VERIFY_FAILED`
+  (o WAL fica acumulando no primary). Isso já causou ~5 dias de arquivamento
+  parado (14–19/09), com 983 WAL pendentes drenados após o restart.
 - Drift conhecido corrigido: o storage do `Cluster` havia sido expandido
   manualmente em produção (100Gi → 250Gi) sem atualizar o overlay; o overlay
   já reflete o valor real.
