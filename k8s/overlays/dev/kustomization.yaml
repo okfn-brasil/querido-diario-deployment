@@ -92,7 +92,7 @@ patches:
         value: http://garage:3900
       - op: replace
         path: /data/QUERIDO_DIARIO_FILES_ENDPOINT
-        value: http://garage:3900/queridodiariobucket
+        value: http://queridodiario.local/queridodiariobucket
     target:
       kind: ConfigMap
       name: app-config

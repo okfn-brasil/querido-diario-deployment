@@ -144,7 +144,14 @@ linha entrar no `censo.csv` publicado em `data.queridodiario.ok.org.br`.
 | http://queridodiario.local | Frontend |
 | http://api.queridodiario.local | API |
 | http://backend-api.queridodiario.local | Backend |
+| http://queridodiario.local/queridodiariobucket/... | Arquivos dos diários (PDF/TXT), servidos pelo endpoint web do Garage |
 | http://localhost:3909 | Garage Web UI (`make k8s-local-garage-ui`) |
+
+Os arquivos dos diários só abrem no navegador depois que o `make k8s-local-up`
+habilita a leitura pública do bucket (`garage bucket website --allow`). Em um
+cluster criado antes dessa rota, rode `make k8s-local-up` de novo; os diários
+que já estavam indexados continuam com a URL antiga (`http://garage:3900/...`)
+até serem reprocessados.
 
 ### Comandos úteis
 
