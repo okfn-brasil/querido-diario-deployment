@@ -118,6 +118,25 @@ make build-frontend FRONTEND_DIR=/outro/caminho
 make k8s-local-frontend-build FRONTEND_DIR=/outro/caminho
 ```
 
+### Governos estaduais no `/cities` da API
+
+O `censo.csv` embutido na imagem da API só lista municípios, então um território
+de governo estadual (ex.: `3299999`, Espírito Santo) não aparece em `/cities` nem
+na busca por nome do frontend, mesmo com diários indexados. No overlay dev, as
+linhas de `k8s/overlays/dev/censo-estados.csv` são acrescentadas ao `censo.csv`
+por um initContainer da API (`patch-api-censo-estados.yaml`).
+
+Para incluir outro estado, adicione a linha no CSV (mesmas colunas do `censo.csv`)
+e rode `make k8s-apply-dev`: o ConfigMap muda de nome e a API reinicia sozinha.
+
+```bash
+curl "http://api.queridodiario.local/cities?city_name=Espírito"
+curl "http://api.queridodiario.local/cities/3299999"
+```
+
+Isso vale só para o ambiente local. Em produção o estado só aparece quando a
+linha entrar no `censo.csv` publicado em `data.queridodiario.ok.org.br`.
+
 ### URLs locais
 
 | URL | Serviço |

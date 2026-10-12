@@ -1,0 +1,41 @@
+# O censo.csv embutido na imagem da API só tem municípios. Em dev, um
+# initContainer gera uma cópia com as linhas de censo-estados.csv (governos
+# estaduais, ADR-0006 do querido-diario-estados) no final, e a API passa a ler
+# essa cópia.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: querido-diario
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: censo-estados
+          image: ghcr.io/okfn-brasil/querido-diario-api:latest
+          command:
+            - sh
+            - -c
+            # awk descarta o cabeçalho do segundo arquivo e garante a quebra de
+            # linha que falta no fim do censo.csv publicado.
+            - awk 'FNR == 1 && NR != 1 { next } { print }' censo.csv /censo-estados/censo-estados.csv > /censo/censo.csv
+          volumeMounts:
+            - name: censo
+              mountPath: /censo
+            - name: censo-estados
+              mountPath: /censo-estados
+      containers:
+        - name: api
+          env:
+            - name: CITY_DATABASE_CSV
+              value: /censo/censo.csv
+          volumeMounts:
+            - name: censo
+              mountPath: /censo
+              readOnly: true
+      volumes:
+        - name: censo
+          emptyDir: {}
+        - name: censo-estados
+          configMap:
+            name: censo-estados
