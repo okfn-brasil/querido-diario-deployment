@@ -1,0 +1,10 @@
+alertmanager: { enabled: false }
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    scrapeInterval: 10s
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+grafana:
+  adminPassword: admin
+  sidecar: { dashboards: { enabled: true, label: grafana_dashboard } }
