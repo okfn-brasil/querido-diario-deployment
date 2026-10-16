@@ -11,6 +11,13 @@ resources:
   # IngressRoutes HTTP para *.queridodiario.local
   - ingressroutes-dev.yaml
 
+configMapGenerator:
+  # Territórios de governos estaduais acrescentados ao censo.csv da API
+  - name: censo-estados
+    namespace: querido-diario
+    files:
+      - censo-estados.csv
+
 images:
   - name: ghcr.io/okfn-brasil/querido-diario-api
     newTag: latest
@@ -85,7 +92,7 @@ patches:
         value: http://garage:3900
       - op: replace
         path: /data/QUERIDO_DIARIO_FILES_ENDPOINT
-        value: http://garage:3900/queridodiariobucket
+        value: http://queridodiario.local/queridodiariobucket
     target:
       kind: ConfigMap
       name: app-config
@@ -98,6 +105,12 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/resources/requests/memory
         value: 256Mi
+    target:
+      kind: Deployment
+      name: api
+
+  # ── API: censo.csv com os governos estaduais ───────────────────────────────
+  - path: patch-api-censo-estados.yaml
     target:
       kind: Deployment
       name: api

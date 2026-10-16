@@ -68,3 +68,46 @@ spec:
       services:
         - name: frontend
           port: 80
+---
+# Arquivos dos diários (PDF/TXT) servidos pelo endpoint web do Garage em
+# http://queridodiario.local/queridodiariobucket/..., que é o
+# QUERIDO_DIARIO_FILES_ENDPOINT do overlay dev. O endpoint web escolhe o bucket
+# pelo header Host, por isso o middleware troca o Host pelo nome do bucket.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: files-strip-prefix
+  namespace: querido-diario
+spec:
+  stripPrefix:
+    prefixes:
+      - /queridodiariobucket
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: files-bucket-host
+  namespace: querido-diario
+spec:
+  headers:
+    customRequestHeaders:
+      Host: queridodiariobucket
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: files-dev
+  namespace: querido-diario
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`queridodiario.local`) && PathPrefix(`/queridodiariobucket`)
+      kind: Rule
+      priority: 100
+      middlewares:
+        - name: files-strip-prefix
+        - name: files-bucket-host
+      services:
+        - name: garage
+          port: 3902

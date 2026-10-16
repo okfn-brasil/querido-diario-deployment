@@ -118,6 +118,24 @@ make build-frontend FRONTEND_DIR=/outro/caminho
 make k8s-local-frontend-build FRONTEND_DIR=/outro/caminho
 ```
 
+### Governos estaduais no `/cities` da API
+
+O `censo.csv` embutido na imagem da API só lista municípios, então um território
+de governo estadual (ex.: `3299999`, Espírito Santo) não aparece em `/cities` nem
+na busca por nome do frontend, mesmo com diários indexados. No overlay dev, as
+linhas de `k8s/overlays/dev/censo-estados.csv` são acrescentadas ao `censo.csv`
+por um initContainer da API (`patch-api-censo-estados.yaml`).
+
+Para incluir outro estado, adicione a linha no CSV (mesmas colunas do `censo.csv`)
+e rode `make k8s-apply-dev`: o ConfigMap muda de nome e a API reinicia sozinha.
+
+```bash
+curl "http://api.queridodiario.local/cities?city_name=Espírito"
+curl "http://api.queridodiario.local/cities/3299999"
+```
+
+Isso vale só para o ambiente local. Em produção o estado só aparece quando a
+linha entrar no `censo.csv` publicado em `data.queridodiario.ok.org.br`.
 ### Rodar API, Backend e Data Processing com o código local
 
 Por padrão o overlay dev usa as imagens `:latest` do GHCR para esses três serviços.
@@ -144,7 +162,14 @@ ser reconstruída (`make build-data-processing-base`).
 | http://queridodiario.local | Frontend |
 | http://api.queridodiario.local | API |
 | http://backend-api.queridodiario.local | Backend |
+| http://queridodiario.local/queridodiariobucket/... | Arquivos dos diários (PDF/TXT), servidos pelo endpoint web do Garage |
 | http://localhost:3909 | Garage Web UI (`make k8s-local-garage-ui`) |
+
+Os arquivos dos diários só abrem no navegador depois que o `make k8s-local-up`
+habilita a leitura pública do bucket (`garage bucket website --allow`). Em um
+cluster criado antes dessa rota, rode `make k8s-local-up` de novo; os diários
+que já estavam indexados continuam com a URL antiga (`http://garage:3900/...`)
+até serem reprocessados.
 
 ### Comandos úteis
 

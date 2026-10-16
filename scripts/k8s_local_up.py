@@ -22,6 +22,7 @@ CLUSTER_NAME = "querido-diario-dev"
 NAMESPACE = "querido-diario"
 GAZETTES_INDEX = "queridodiario"
 GAZETTES_DB = "queridodiario"
+GARAGE_BUCKET = "queridodiariobucket"
 QD_DIR = Path(os.environ.get("QD_DIR", pc.REPO_ROOT.parent / "querido-diario")).resolve()
 
 REPO_ROOT = pc.REPO_ROOT
@@ -340,10 +341,31 @@ def wait_for_infra() -> None:
     pc.log("Aguardando infra (garage, opensearch)...")
     pc.run(["kubectl", "rollout", "status", "deployment/garage", "-n", NAMESPACE, "--timeout=120s"])
     pc.run(["kubectl", "rollout", "status", "statefulset/opensearch", "-n", NAMESPACE, "--timeout=300s"])
+    enable_garage_bucket_website()
 
     pc.log("Aguardando serviços de aplicação...")
     pc.run(["kubectl", "rollout", "status", "deployment/redis", "-n", NAMESPACE, "--timeout=120s"])
     pc.run(["kubectl", "rollout", "status", "deployment/apache-tika", "-n", NAMESPACE, "--timeout=300s"])
+
+
+def enable_garage_bucket_website() -> None:
+    """Libera a leitura pública do bucket dos diários pelo endpoint web do Garage.
+
+    Sem isso o navegador não consegue abrir os PDFs retornados pela API (o
+    endpoint S3 exige requisição assinada). O comando é idempotente.
+    """
+    pc.log("Habilitando leitura pública do bucket dos diários no Garage...")
+    for _ in range(10):
+        if pc.run_ok(
+            ["kubectl", "exec", "-n", NAMESPACE, "deployment/garage", "--",
+             "/garage", "bucket", "website", "--allow", GARAGE_BUCKET]
+        ):
+            return
+        time.sleep(3)
+    pc.warn(
+        f"Não consegui habilitar o website do bucket {GARAGE_BUCKET}; os PDFs não "
+        "vão abrir pelo navegador até rodar `make k8s-local-up` de novo."
+    )
 
 
 # ─── Bootstrap do índice do OpenSearch ──────────────────────────────────────
