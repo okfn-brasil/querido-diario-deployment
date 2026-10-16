@@ -30,6 +30,7 @@ K8S_DIR = REPO_ROOT / "k8s"
 LOCAL_DIR = K8S_DIR / "local"
 KIND_CONFIG = LOCAL_DIR / "kind-config.yaml"
 TRAEFIK_VALUES = LOCAL_DIR / "traefik-values.yaml"
+MONITORING_VALUES = LOCAL_DIR / "monitoring-values.yaml"
 DEV_OVERLAY = K8S_DIR / "overlays" / "dev"
 
 KIND_MIN_VERSION = "0.20.0"
@@ -489,9 +490,64 @@ def check_hosts_file() -> None:
         pc.info("hosts file já configurado.")
 
 
+# ─── 12. Prometheus + Grafana via Helm ───────────────────────────────────────
+
+def install_monitoring() -> None:
+    pc.log("Configurando repositório helm do Prometheus Community...")
+    pc.run(
+        ["helm", "repo", "add", "prometheus-community", "https://prometheus-community.github.io/helm-charts"],
+        check=False,
+    )
+    if not pc.run_ok(["helm", "repo", "update", "prometheus-community"]):
+        pc.warn("helm repo update falhou, usando cache local.")
+
+    # Verifica se a release principal está em estado quebrado (failed)
+    status = pc.capture(["helm", "status", "monitoring", "-n", "monitoring"]) or ""
+    if "STATUS: failed" in status:
+        pc.warn("Release monitoring em estado 'failed'. Removendo para reinstalar...")
+        pc.run(["helm", "uninstall", "monitoring", "-n", "monitoring"], check=False)
+        pc.run(["helm", "uninstall", "pushgateway", "-n", "monitoring"], check=False)
+        pc.run(["kubectl", "delete", "namespace", "monitoring", "--ignore-not-found"], check=False)
+        time.sleep(3)
+
+    pc.log("Instalando/atualizando kube-prometheus-stack (Prometheus + Grafana)...")
+    pc.run(
+        [
+            "helm", "upgrade", "--install", "monitoring", "prometheus-community/kube-prometheus-stack",
+            "--namespace", "monitoring",
+            "--create-namespace",
+            "--values", str(MONITORING_VALUES),
+        ]
+    )
+
+    pc.log("Instalando/atualizando Prometheus Pushgateway...")
+    pc.run(
+        [
+            "helm", "upgrade", "--install", "pushgateway", "prometheus-community/prometheus-pushgateway",
+            "--namespace", "monitoring",
+        ]
+    )
+
+    pc.log("Aguardando Operator e Prometheus ficarem prontos...")
+    pc.run(
+        [
+            "kubectl", "rollout", "status",
+            "deployment/monitoring-kube-prometheus-operator",
+            "-n", "monitoring",
+            "--timeout=300s",
+        ]
+    )
+    pc.info("Stack de monitoramento pronta.")
+
+
 # ─── main ────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    # Se chamado via `make k8s-local-monitoring`
+    if "--monitoring" in sys.argv:
+        install_monitoring()
+        return
+
     preflight()
     ensure_dependencies()
     validate_dev_overlay_builds("kubectl")

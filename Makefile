@@ -26,7 +26,7 @@
         k8s-local-garage-ui k8s-local-data-processing \
         k8s-local-frontend-build \
         k8s-local-api-build k8s-local-backend-build \
-        k8s-local-data-processing-build
+        k8s-local-data-processing-build k8s-local-monitoring
 
 PYTHON ?= python3
 REGISTRY = ghcr.io/okfn-brasil
@@ -150,6 +150,9 @@ k8s-local-data-processing: ## Executa data-processing manualmente no cluster loc
 k8s-local-frontend-build: ## Builda e carrega a imagem do frontend no cluster kind local
 	docker build --network=host -t $(FRONTEND_IMAGE):local $(FRONTEND_DIR)
 	kind load docker-image $(FRONTEND_IMAGE):local --name querido-diario-dev
+
+k8s-local-monitoring: ## Sobe stack de monitoramento (Prometheus + Grafana) no kind local
+	$(PYTHON) scripts/k8s_local_up.py --monitoring
 
 # Os targets abaixo apontam o workload para a imagem :local direto no cluster
 # (o overlay dev continua em :latest, então `make k8s-local-up` funciona sem build
