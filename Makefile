@@ -24,7 +24,9 @@
         k8s-apply-prod k8s-apply-dev k8s-diff-prod k8s-diff-dev \
         k8s-local-up k8s-local-down k8s-local-status k8s-local-hosts \
         k8s-local-garage-ui k8s-local-data-processing \
-        k8s-local-frontend-build
+        k8s-local-frontend-build \
+        k8s-local-api-build k8s-local-backend-build \
+        k8s-local-data-processing-build
 
 PYTHON ?= python3
 REGISTRY = ghcr.io/okfn-brasil
@@ -36,6 +38,9 @@ DATA_PROCESSING_DIR  ?= ../querido-diario-data-processing
 FRONTEND_DIR         ?= ../querido-diario-frontend
 
 FRONTEND_IMAGE       = $(REGISTRY)/querido-diario-frontend
+API_IMAGE            = $(REGISTRY)/querido-diario-api
+BACKEND_IMAGE        = $(REGISTRY)/querido-diario-backend
+DATA_PROCESSING_IMAGE = $(REGISTRY)/querido-diario-data-processing
 
 help: ## Mostra esta mensagem de ajuda
 	@$(PYTHON) scripts/help.py
@@ -145,3 +150,17 @@ k8s-local-data-processing: ## Executa data-processing manualmente no cluster loc
 k8s-local-frontend-build: ## Builda e carrega a imagem do frontend no cluster kind local
 	docker build --network=host -t $(FRONTEND_IMAGE):local $(FRONTEND_DIR)
 	kind load docker-image $(FRONTEND_IMAGE):local --name querido-diario-dev
+
+# Os targets abaixo apontam o workload para a imagem :local direto no cluster
+# (o overlay dev continua em :latest, então `make k8s-local-up` funciona sem build
+# prévio). `make k8s-apply-dev`/`k8s-local-up` voltam para :latest — rode o target
+# de novo para reapontar para o código local.
+
+k8s-local-api-build: build-api ## Builda a API do código local, carrega no kind e reinicia o deployment
+	$(PYTHON) scripts/k8s_local_image.py $(API_IMAGE) deployment/api
+
+k8s-local-backend-build: build-backend ## Builda o Backend do código local, carrega no kind e reinicia backend/celery
+	$(PYTHON) scripts/k8s_local_image.py $(BACKEND_IMAGE) deployment/backend deployment/celery-beat deployment/celery-worker
+
+k8s-local-data-processing-build: build-data-processing ## Builda o Data Processing do código local e carrega no kind (vale para o próximo job)
+	$(PYTHON) scripts/k8s_local_image.py $(DATA_PROCESSING_IMAGE) cronjob/data-processing
