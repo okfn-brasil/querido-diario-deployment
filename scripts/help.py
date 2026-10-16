@@ -18,6 +18,10 @@ SECTIONS = [
         ("make k8s-local-hosts", "adiciona entradas ao hosts file"),
         ("make k8s-local-garage-ui", "port-forward Garage UI -> localhost:3909"),
         ("make k8s-local-data-processing", "executa data-processing manualmente"),
+        ("make k8s-local-frontend-build", "builda o frontend local e carrega no kind"),
+        ("make k8s-local-api-build", "builda a API local, carrega no kind e reinicia"),
+        ("make k8s-local-backend-build", "builda o Backend local, carrega no kind e reinicia"),
+        ("make k8s-local-data-processing-build", "builda o Data Processing local e carrega no kind"),
     ]),
     ("Kubernetes (kustomize)", [
         ("make k8s-build-dev", "dry-run overlay dev"),

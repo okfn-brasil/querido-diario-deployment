@@ -136,6 +136,24 @@ curl "http://api.queridodiario.local/cities/3299999"
 
 Isso vale só para o ambiente local. Em produção o estado só aparece quando a
 linha entrar no `censo.csv` publicado em `data.queridodiario.ok.org.br`.
+### Rodar API, Backend e Data Processing com o código local
+
+Por padrão o overlay dev usa as imagens `:latest` do GHCR para esses três serviços.
+Para testar alterações locais (a partir do que estiver em checkout nos repositórios irmãos):
+
+```bash
+make k8s-local-api-build               # build + kind load + troca para :local + restart
+make k8s-local-backend-build           # idem, para backend, celery-beat e celery-worker
+make k8s-local-data-processing-build   # build + kind load; vale para o próximo job
+make k8s-local-data-processing         # dispara um job já com a imagem local
+```
+
+Rode o target de novo a cada alteração no código. `make k8s-apply-dev` e
+`make k8s-local-up` reaplicam o overlay e voltam os serviços para `:latest` —
+basta rodar o target novamente para reapontar para `:local`.
+
+Se o `requirements.txt` do Data Processing mudar, a imagem base também precisa
+ser reconstruída (`make build-data-processing-base`).
 
 ### URLs locais
 
