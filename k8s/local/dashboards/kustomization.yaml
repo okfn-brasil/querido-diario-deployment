@@ -1,0 +1,19 @@
+# Dashboards do Grafana local (make k8s-local-monitoring / make k8s-local-dashboards).
+# O sidecar do Grafana (k8s/local/monitoring-values.yaml) carrega todo ConfigMap
+# do namespace monitoring com a label grafana_dashboard. Para editar: ajuste no
+# Grafana, exporte o JSON (Share > Export, sem "export for sharing externally")
+# por cima do arquivo e rode `make k8s-local-dashboards`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: monitoring
+
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+
+configMapGenerator:
+  - name: grafana-dashboard-qd-pipeline
+    files:
+      - qd-pipeline.json
