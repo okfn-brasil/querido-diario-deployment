@@ -1,0 +1,35 @@
+# Values do kube-prometheus-stack para o cluster kind local (make k8s-local-monitoring).
+# Mínimo para caber no notebook: sem Alertmanager, retenção curta e só os alvos
+# que existem no kind.
+
+alertmanager: { enabled: false }
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    scrapeInterval: 10s
+    # Coleta todos os PodMonitors/ServiceMonitors do cluster, não só os criados
+    # pelo próprio chart (necessário para os monitores do querido-diario).
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { memory: 1Gi }
+
+grafana:
+  adminPassword: admin  # só para o ambiente local
+  # Dashboards versionados como ConfigMap com a label grafana_dashboard (B3).
+  sidecar: { dashboards: { enabled: true, label: grafana_dashboard } }
+
+# No kind, controller-manager, scheduler, etcd e kube-proxy só escutam em
+# localhost dentro do nó; os alvos ficariam sempre "down".
+kubeControllerManager: { enabled: false }
+kubeScheduler: { enabled: false }
+kubeEtcd: { enabled: false }
+kubeProxy: { enabled: false }
+
+prometheus-node-exporter:
+  # O mount de / do host falha no Docker Desktop (Mac/Windows) por não ser
+  # "shared"; sem ele perdemos só as métricas de disco do nó.
+  hostRootFsMount: { enabled: false }

@@ -164,6 +164,7 @@ ser reconstruída (`make build-data-processing-base`).
 | http://backend-api.queridodiario.local | Backend |
 | http://queridodiario.local/queridodiariobucket/... | Arquivos dos diários (PDF/TXT), servidos pelo endpoint web do Garage |
 | http://localhost:3909 | Garage Web UI (`make k8s-local-garage-ui`) |
+| http://localhost:3000 | Grafana (`make k8s-local-monitoring` + `make k8s-local-grafana`, admin/admin) |
 
 Os arquivos dos diários só abrem no navegador depois que o `make k8s-local-up`
 habilita a leitura pública do bucket (`garage bucket website --allow`). Em um
@@ -177,8 +178,30 @@ até serem reprocessados.
 make k8s-local-status            # status dos pods
 make k8s-local-garage-ui         # port-forward para o Garage Web UI
 make k8s-local-data-processing   # executa data-processing manualmente
+make k8s-local-monitoring        # sobe Prometheus + Grafana + Pushgateway (namespace monitoring)
+make k8s-local-grafana           # port-forward para o Grafana
 make k8s-local-down              # destroi o cluster
 ```
+
+### Monitoramento (Prometheus + Grafana)
+
+Opcional, fora do `make k8s-local-up` porque pesa ~1 GB de RAM. Com o cluster
+de pé:
+
+```bash
+make k8s-local-monitoring   # kube-prometheus-stack + Pushgateway no namespace monitoring
+make k8s-local-grafana      # http://localhost:3000 (admin / admin)
+```
+
+Se a porta 3000 já estiver em uso, rode `make k8s-local-grafana GRAFANA_PORT=3001`.
+
+CPU e memória dos pods ficam no dashboard *Kubernetes / Compute Resources /
+Namespace (Pods)*, escolhendo o namespace `querido-diario`. Os values ficam em
+`k8s/local/monitoring-values.yaml`: o Prometheus coleta todos os
+`ServiceMonitor`/`PodMonitor` do cluster e o Grafana carrega dashboards de
+ConfigMaps com a label `grafana_dashboard`. O Pushgateway
+(`pushgateway-prometheus-pushgateway.monitoring:9091`) recebe métricas de
+processos batch, como o CronJob `data-processing`.
 
 ### Troubleshooting
 

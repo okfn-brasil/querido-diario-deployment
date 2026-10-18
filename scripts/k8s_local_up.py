@@ -30,6 +30,7 @@ K8S_DIR = REPO_ROOT / "k8s"
 LOCAL_DIR = K8S_DIR / "local"
 KIND_CONFIG = LOCAL_DIR / "kind-config.yaml"
 TRAEFIK_VALUES = LOCAL_DIR / "traefik-values.yaml"
+MONITORING_VALUES = LOCAL_DIR / "monitoring-values.yaml"
 DEV_OVERLAY = K8S_DIR / "overlays" / "dev"
 
 KIND_MIN_VERSION = "0.20.0"
@@ -489,9 +490,90 @@ def check_hosts_file() -> None:
         pc.info("hosts file já configurado.")
 
 
+# ─── Monitoramento (Prometheus + Grafana) via helm ──────────────────────────
+#
+# Opcional, fora do `make k8s-local-up` por pesar ~1GB de RAM: sobe só com
+# `make k8s-local-monitoring`, depois do cluster criado.
+
+MONITORING_NAMESPACE = "monitoring"
+
+
+def install_monitoring() -> None:
+    if not MONITORING_VALUES.exists():
+        pc.err(f"Arquivo esperado não encontrado: {MONITORING_VALUES}")
+    if CLUSTER_NAME not in (pc.capture(["kind", "get", "clusters"]) or "").splitlines():
+        pc.err(f"Cluster '{CLUSTER_NAME}' não existe. Rode `make k8s-local-up` antes.")
+    pc.run(["kubectl", "config", "use-context", f"kind-{CLUSTER_NAME}"])
+
+    pc.log("Configurando repositório helm do prometheus-community...")
+    pc.run(
+        ["helm", "repo", "add", "prometheus-community", "https://prometheus-community.github.io/helm-charts"],
+        check=False,
+    )
+    if not pc.run_ok(["helm", "repo", "update", "prometheus-community"]):
+        pc.warn("helm repo update falhou, usando cache local.")
+
+    for release in ("monitoring", "pushgateway"):
+        status = pc.capture(["helm", "status", release, "-n", MONITORING_NAMESPACE]) or ""
+        if "STATUS: failed" in status:
+            pc.warn(f"Release {release} em estado 'failed'. Removendo para reinstalar...")
+            pc.run(["helm", "uninstall", release, "-n", MONITORING_NAMESPACE], check=False)
+
+    pc.log("Instalando/atualizando kube-prometheus-stack (pode levar alguns minutos no primeiro pull)...")
+    pc.run(
+        [
+            "helm", "upgrade", "--install", "monitoring", "prometheus-community/kube-prometheus-stack",
+            "--namespace", MONITORING_NAMESPACE,
+            "--create-namespace",
+            "--values", str(MONITORING_VALUES),
+        ]
+    )
+
+    pc.log("Instalando/atualizando Prometheus Pushgateway...")
+    pc.run(
+        [
+            "helm", "upgrade", "--install", "pushgateway", "prometheus-community/prometheus-pushgateway",
+            "--namespace", MONITORING_NAMESPACE,
+        ]
+    )
+
+    pc.log("Aguardando Prometheus, Grafana e Pushgateway ficarem prontos...")
+    for workload in (
+        "deployment/monitoring-kube-prometheus-operator",
+        "deployment/monitoring-kube-state-metrics",
+        "deployment/monitoring-grafana",
+        "deployment/pushgateway-prometheus-pushgateway",
+    ):
+        pc.run(["kubectl", "rollout", "status", workload, "-n", MONITORING_NAMESPACE, "--timeout=300s"])
+    # O StatefulSet do Prometheus é criado pelo operator, então pode ainda não existir.
+    for _ in range(30):
+        if pc.run_ok(["kubectl", "get", "statefulset/prometheus-monitoring-kube-prometheus-prometheus",
+                      "-n", MONITORING_NAMESPACE]):
+            break
+        time.sleep(2)
+    pc.run(
+        [
+            "kubectl", "rollout", "status", "statefulset/prometheus-monitoring-kube-prometheus-prometheus",
+            "-n", MONITORING_NAMESPACE, "--timeout=300s",
+        ]
+    )
+
+    print()
+    pc.log("Monitoramento pronto!")
+    print()
+    print("  Grafana:  make k8s-local-grafana  ->  http://localhost:3000  (admin / admin)")
+    print("            Dashboard: Kubernetes / Compute Resources / Namespace (Pods), namespace querido-diario")
+    print()
+
+
 # ─── main ────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    if "--monitoring" in sys.argv[1:]:
+        ensure_dependencies()
+        install_monitoring()
+        return
+
     preflight()
     ensure_dependencies()
     validate_dev_overlay_builds("kubectl")
@@ -515,6 +597,7 @@ def main() -> None:
     print("  Outros comandos úteis:")
     print("    make k8s-local-hosts   # adiciona entradas ao hosts file")
     print("    make k8s-local-status  # status dos pods")
+    print("    make k8s-local-monitoring  # sobe Prometheus + Grafana (opcional)")
     print("    make k8s-local-down    # destroi o cluster")
     print()
 
