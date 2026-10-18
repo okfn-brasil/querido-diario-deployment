@@ -22,6 +22,8 @@ SECTIONS = [
         ("make k8s-local-api-build", "builda a API local, carrega no kind e reinicia"),
         ("make k8s-local-backend-build", "builda o Backend local, carrega no kind e reinicia"),
         ("make k8s-local-data-processing-build", "builda o Data Processing local e carrega no kind"),
+        ("make k8s-local-monitoring", "sobe Prometheus + Grafana + Pushgateway no kind"),
+        ("make k8s-local-grafana", "port-forward Grafana -> localhost:3000 (admin/admin)"),
     ]),
     ("Kubernetes (kustomize)", [
         ("make k8s-build-dev", "dry-run overlay dev"),

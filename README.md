@@ -61,6 +61,7 @@ URLs disponíveis após o setup:
 | http://api.queridodiario.local | API |
 | http://backend-api.queridodiario.local | Backend |
 | `make k8s-local-garage-ui` → http://localhost:3909 | Garage Web UI |
+| `make k8s-local-monitoring` + `make k8s-local-grafana` → http://localhost:3000 | Grafana (admin/admin) |
 
 ### Produção
 

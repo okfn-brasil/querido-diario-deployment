@@ -77,7 +77,8 @@ k8s/
 │   ├── production/          # Prod: réplicas, limites maiores, imagens fixas
 │   └── production-local/    # GITIGNORED — valores reais (endpoint S3, ClusterIssuer)
 ├── local/
-│   └── traefik-values.yaml
+│   ├── traefik-values.yaml
+│   └── monitoring-values.yaml  # kube-prometheus-stack (make k8s-local-monitoring)
 adrs/                        # Architecture Decision Records
 docs/                        # Documentação técnica complementar
 scripts/                     # Automação (Python, multiplataforma — ver Makefile)
@@ -117,12 +118,14 @@ make k8s-local-frontend-build  # builda e carrega imagem do frontend no cluster
 | http://api.queridodiario.local | API |
 | http://backend-api.queridodiario.local | Backend |
 | http://localhost:3909 | Garage Web UI (`make k8s-local-garage-ui`) |
+| http://localhost:3000 | Grafana (`make k8s-local-monitoring` + `make k8s-local-grafana`, admin/admin) |
 
 ### Comandos úteis
 
 ```bash
 make k8s-local-status           # status dos pods
 make k8s-local-data-processing  # executa data-processing manualmente (CronJob suspenso em dev)
+make k8s-local-monitoring       # sobe Prometheus + Grafana (opcional; ver k8s/README.md)
 make k8s-local-down             # destroi o cluster kind
 ```
 
