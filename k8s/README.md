@@ -201,7 +201,9 @@ Namespace (Pods)*, escolhendo o namespace `querido-diario`. Os values ficam em
 `ServiceMonitor`/`PodMonitor` do cluster e o Grafana carrega dashboards de
 ConfigMaps com a label `grafana_dashboard`. O Pushgateway
 (`pushgateway-prometheus-pushgateway.monitoring:9091`) recebe métricas de
-processos batch, como o CronJob `data-processing`.
+processos batch, como o CronJob `data-processing`: no overlay dev o
+`PUSHGATEWAY_URL` do `app-config` já aponta para ele, e cada execução
+(`make k8s-local-data-processing`) envia as séries `qd_*` ao fim do pipeline.
 
 ### Troubleshooting
 
