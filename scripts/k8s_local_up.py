@@ -534,6 +534,10 @@ def install_monitoring() -> None:
         [
             "helm", "upgrade", "--install", "pushgateway", "prometheus-community/prometheus-pushgateway",
             "--namespace", MONITORING_NAMESPACE,
+            # Sem o ServiceMonitor o Prometheus não raspa o Pushgateway; honorLabels
+            # preserva o job="data-processing" enviado pelo CronJob.
+            "--set", "serviceMonitor.enabled=true",
+            "--set", "serviceMonitor.honorLabels=true",
         ]
     )
 

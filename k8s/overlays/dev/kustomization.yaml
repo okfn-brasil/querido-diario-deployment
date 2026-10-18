@@ -93,6 +93,10 @@ patches:
       - op: replace
         path: /data/QUERIDO_DIARIO_FILES_ENDPOINT
         value: http://queridodiario.local/queridodiariobucket
+      # Pushgateway de make k8s-local-monitoring; sem ele, o envio só gera aviso no log
+      - op: replace
+        path: /data/PUSHGATEWAY_URL
+        value: pushgateway-prometheus-pushgateway.monitoring:9091
     target:
       kind: ConfigMap
       name: app-config

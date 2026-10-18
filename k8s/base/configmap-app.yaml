@@ -86,6 +86,11 @@ data:
   STORAGE_REGION: "us-east-1"
   STORAGE_ENDPOINT: ""
   EXECUTION_MODE: "UNPROCESSED"
+  # Métricas Prometheus (monitoring/metrics.py): rótulo `mode` das séries e
+  # Pushgateway que recebe as métricas do CronJob no fim de cada execução.
+  # Vazio = não envia (produção, até existir Prometheus no namespace).
+  PIPELINE_MODE: "cron"
+  PUSHGATEWAY_URL: ""
   # Banco criado pelo bootstrap do CNPG (k8s/base/postgres/cluster.yaml).
   POSTGRES_DB: "queridodiario"
   POSTGRES_PORT: "5432"
