@@ -31,6 +31,7 @@ LOCAL_DIR = K8S_DIR / "local"
 KIND_CONFIG = LOCAL_DIR / "kind-config.yaml"
 TRAEFIK_VALUES = LOCAL_DIR / "traefik-values.yaml"
 MONITORING_VALUES = LOCAL_DIR / "monitoring-values.yaml"
+DASHBOARDS_DIR = LOCAL_DIR / "dashboards"
 DEV_OVERLAY = K8S_DIR / "overlays" / "dev"
 
 KIND_MIN_VERSION = "0.20.0"
@@ -562,11 +563,14 @@ def install_monitoring() -> None:
         ]
     )
 
+    pc.log("Aplicando dashboards do Grafana (k8s/local/dashboards)...")
+    pc.run(["kubectl", "apply", "-k", str(DASHBOARDS_DIR)])
+
     print()
     pc.log("Monitoramento pronto!")
     print()
     print("  Grafana:  make k8s-local-grafana  ->  http://localhost:3000  (admin / admin)")
-    print("            Dashboard: Kubernetes / Compute Resources / Namespace (Pods), namespace querido-diario")
+    print("            Dashboard: Querido Diário / Pipeline (vazão, tempos, fila e recursos)")
     print()
 
 

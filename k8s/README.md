@@ -195,8 +195,19 @@ make k8s-local-grafana      # http://localhost:3000 (admin / admin)
 
 Se a porta 3000 já estiver em uso, rode `make k8s-local-grafana GRAFANA_PORT=3001`.
 
-CPU e memória dos pods ficam no dashboard *Kubernetes / Compute Resources /
-Namespace (Pods)*, escolhendo o namespace `querido-diario`. Os values ficam em
+O dashboard *Querido Diário / Pipeline* mostra a vazão (`qd_gazettes_processed_total`
+por `mode` e `status`), o p50/p95 do tempo por diário e da latência coleta →
+indexado, a profundidade da fila e da DLQ (Parte C), as réplicas do
+`extraction-worker` e CPU/memória por pod. A primeira linha traz os números da
+última execução do CronJob: o Pushgateway substitui os valores a cada push, então
+nos gráficos baseados em `rate()` cada execução aparece só como um pico. O JSON
+fica em `k8s/local/dashboards/qd-pipeline.json` e vira um ConfigMap com a label
+`grafana_dashboard: "1"`; depois de editar no Grafana, exporte o JSON por cima do
+arquivo e rode `make k8s-local-dashboards`. Os painéis da fila esperam que o
+`redis_exporter` do `redis-queue` exporte o tamanho das listas com
+`REDIS_EXPORTER_CHECK_SINGLE_KEYS=db0=extraction,db0=qd:extraction:dead`.
+
+Os values ficam em
 `k8s/local/monitoring-values.yaml`: o Prometheus coleta todos os
 `ServiceMonitor`/`PodMonitor` do cluster e o Grafana carrega dashboards de
 ConfigMaps com a label `grafana_dashboard`. O Pushgateway

@@ -78,7 +78,8 @@ k8s/
 │   └── production-local/    # GITIGNORED — valores reais (endpoint S3, ClusterIssuer)
 ├── local/
 │   ├── traefik-values.yaml
-│   └── monitoring-values.yaml  # kube-prometheus-stack (make k8s-local-monitoring)
+│   ├── monitoring-values.yaml  # kube-prometheus-stack (make k8s-local-monitoring)
+│   └── dashboards/          # dashboards do Grafana como ConfigMap (make k8s-local-dashboards)
 adrs/                        # Architecture Decision Records
 docs/                        # Documentação técnica complementar
 scripts/                     # Automação (Python, multiplataforma — ver Makefile)
