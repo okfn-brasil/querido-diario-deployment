@@ -49,6 +49,23 @@ patches:
       kind: Deployment
       name: celery-worker
 
+  # ── API: readiness mais tolerante ──────────────────────────────────────────
+  # As buscas no índice queridodiario (~275G, 1 shard) levam de 10 a 20s e
+  # ocupam os workers da API; com timeout de 5s (default) o /health estoura
+  # e os pods ficam 0/1 mesmo atendendo requisições (visto em 2026-10-22,
+  # com o api-pdb minAvailable=3 bloqueando drains). Mitigação — a causa
+  # (I/O do OpenSearch) continua em investigação.
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/readinessProbe/timeoutSeconds
+        value: 10
+      - op: add
+        path: /spec/template/spec/containers/0/readinessProbe/failureThreshold
+        value: 6
+    target:
+      kind: Deployment
+      name: api
+
   # ── PostgreSQL via CloudNativePG ───────────────────────────────────────────
   - patch: |-
       - op: replace

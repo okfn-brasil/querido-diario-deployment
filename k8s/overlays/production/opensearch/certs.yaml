@@ -128,7 +128,11 @@ data:
     plugins.security.allow_default_init_securityindex: true
     plugins.security.authcz.admin_dn:
       - CN=opensearch.querido-diario.svc.cluster.local
-    plugins.security.audit.type: internal_opensearch
+    # Audit log desligado: gerava um índice security-auditlog-* por dia
+    # (40-175 mil docs/dia) e escrita extra num nó já limitado por I/O.
+    # Setting estático — exige restart do nó. Os índices security-auditlog-*
+    # existentes não são apagados por isso.
+    plugins.security.audit.type: noop
     plugins.security.enable_snapshot_restore_privilege: true
     plugins.security.check_snapshot_restore_write_privileges: true
     plugins.security.restapi.roles_enabled: ["all_access", "security_rest_api_access"]
