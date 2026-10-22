@@ -1,0 +1,44 @@
+---
+# Fila de extração (ADR-0009/0010): troca o CronJob sequencial data-processing
+# (baseline) por Redis dedicado + workers com Tika sidecar escalados pelo KEDA.
+# Incluído pelo overlay dev-queue; o overlay dev continua sendo o baseline.
+#
+# Os recursos daqui levam o label app.kubernetes.io/part-of=queue-pipeline,
+# usado pelo `make k8s-local-queue-down` para removê-los. O label vai em cada
+# manifesto, e não num transformer `labels`, porque num Component ele também
+# rotularia os recursos do overlay pai.
+#
+# Os PodMonitors ficam em monitoring/, aplicados à parte: o CRD só existe com
+# o monitoramento instalado (make k8s-local-monitoring).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - redis-queue.yaml
+  - extraction-worker.yaml
+  - enqueue-cronjob.yaml
+  - themes-cronjob.yaml
+  - scaledobject.yaml
+
+patches:
+  # O CronJob data-processing (baseline) não roda junto com a fila
+  - patch: |-
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: data-processing
+        namespace: querido-diario
+      spec:
+        suspend: true
+
+  # Nenhum pipeline da fila usa o Tika compartilhado: o worker usa o sidecar
+  # e o themes_from_queue não chama o Tika. Sem isso, uma JVM fica ligada com
+  # a fila vazia, contra a escala a zero da ADR-0010 (cenário E2)
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: apache-tika
+        namespace: querido-diario
+      spec:
+        replicas: 0

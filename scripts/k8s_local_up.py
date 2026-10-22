@@ -33,6 +33,7 @@ TRAEFIK_VALUES = LOCAL_DIR / "traefik-values.yaml"
 MONITORING_VALUES = LOCAL_DIR / "monitoring-values.yaml"
 DASHBOARDS_DIR = LOCAL_DIR / "dashboards"
 DEV_OVERLAY = K8S_DIR / "overlays" / "dev"
+DEV_QUEUE_OVERLAY = K8S_DIR / "overlays" / "dev-queue"
 
 KIND_MIN_VERSION = "0.20.0"
 KIND_INSTALL_VERSION = "0.24.0"
@@ -574,12 +575,105 @@ def install_monitoring() -> None:
     print()
 
 
+# ─── Fila de extração (KEDA + overlay dev-queue) ────────────────────────────
+#
+# Opcional, fora do `make k8s-local-up`: `make k8s-local-queue` instala o KEDA
+# e troca o pipeline de extração para a fila (ADR-0009/0010). Volta para o
+# CronJob (baseline) com `make k8s-local-queue-down`.
+
+KEDA_NAMESPACE = "keda"
+# 2.18 suporta Kubernetes 1.31 (kindest/node:v1.31.2)
+KEDA_CHART_VERSION = "2.18.3"
+QUEUE_IMAGE = "ghcr.io/okfn-brasil/querido-diario-data-processing:tcc-fila"
+QUEUE_PART_OF_LABEL = "app.kubernetes.io/part-of=queue-pipeline"
+QUEUE_MONITORING_DIR = K8S_DIR / "components" / "queue-pipeline" / "monitoring"
+
+
+def _podmonitor_crd_exists() -> bool:
+    return pc.run_ok(["kubectl", "get", "crd", "podmonitors.monitoring.coreos.com"])
+
+
+def install_keda() -> None:
+    if CLUSTER_NAME not in (pc.capture(["kind", "get", "clusters"]) or "").splitlines():
+        pc.err(f"Cluster '{CLUSTER_NAME}' não existe. Rode `make k8s-local-up` antes.")
+    pc.run(["kubectl", "config", "use-context", f"kind-{CLUSTER_NAME}"])
+
+    pc.log("Configurando repositório helm do KEDA...")
+    pc.run(["helm", "repo", "add", "kedacore", "https://kedacore.github.io/charts"], check=False)
+    if not pc.run_ok(["helm", "repo", "update", "kedacore"]):
+        pc.warn("helm repo update falhou, usando cache local.")
+
+    pc.log(f"Instalando/atualizando KEDA {KEDA_CHART_VERSION}...")
+    pc.run(
+        [
+            "helm", "upgrade", "--install", "keda", "kedacore/keda",
+            "--namespace", KEDA_NAMESPACE,
+            "--create-namespace",
+            "--version", KEDA_CHART_VERSION,
+            "--wait", "--timeout", "300s",
+        ]
+    )
+
+
+def apply_queue_overlay() -> None:
+    # Sem a imagem no nó, o worker fica em ErrImagePull: ela não é publicada no
+    # GHCR (ver Dockerfile/BASE_TAG no querido-diario-data-processing)
+    ok, output = _kind_load(QUEUE_IMAGE)
+    if not ok:
+        pc.warn(f"Não consegui carregar {QUEUE_IMAGE} no kind: {output.strip()}")
+        pc.warn("Gere a imagem no querido-diario-data-processing e rode de novo:")
+        pc.warn("  make build-data-processing-base")
+        pc.warn(f"  docker buildx build --load --build-arg BASE_TAG=local -t {QUEUE_IMAGE} .")
+
+    pc.log("Aplicando overlay dev-queue (fila de extração)...")
+    pc.run(["kubectl", "apply", "-k", str(DEV_QUEUE_OVERLAY)])
+    pc.run(["kubectl", "rollout", "status", "deployment/redis-queue", "-n", NAMESPACE, "--timeout=180s"])
+
+    if _podmonitor_crd_exists():
+        pc.log("Aplicando PodMonitors da fila (worker e redis-queue)...")
+        pc.run(["kubectl", "apply", "-k", str(QUEUE_MONITORING_DIR)])
+    else:
+        pc.info("Monitoramento não instalado: PodMonitors da fila não aplicados. Depois de")
+        pc.info(f"`make k8s-local-monitoring`, rode: kubectl apply -k {QUEUE_MONITORING_DIR.relative_to(REPO_ROOT)}")
+
+    print()
+    pc.log("Fila de extração pronta! O extraction-worker fica em 0 réplicas até haver diários na fila.")
+    print()
+    print("  Enfileirar agora:  kubectl create job --from=cronjob/enqueue-extraction enqueue-manual -n querido-diario")
+    print("  Acompanhar:        kubectl get scaledobject,deployment/extraction-worker -n querido-diario -w")
+    print("  Voltar ao CronJob: make k8s-local-queue-down")
+    print()
+
+
+def remove_queue() -> None:
+    pc.log("Removendo a fila de extração e voltando ao overlay dev (baseline)...")
+    # ScaledObject primeiro, para o KEDA não recriar réplicas do worker
+    kinds = ["scaledobject", "deployment", "service", "cronjob", "job", "pvc"]
+    if _podmonitor_crd_exists():
+        kinds.append("podmonitor")
+    pc.run(
+        [
+            "kubectl", "delete", ",".join(kinds),
+            "-n", NAMESPACE, "-l", QUEUE_PART_OF_LABEL, "--ignore-not-found",
+        ]
+    )
+    apply_dev_overlay()
+
+
 # ─── main ────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     if "--monitoring" in sys.argv[1:]:
         ensure_dependencies()
         install_monitoring()
+        return
+    if "--queue" in sys.argv[1:]:
+        ensure_dependencies()
+        install_keda()
+        apply_queue_overlay()
+        return
+    if "--queue-down" in sys.argv[1:]:
+        remove_queue()
         return
 
     preflight()

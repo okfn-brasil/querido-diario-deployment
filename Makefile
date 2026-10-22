@@ -27,7 +27,8 @@
         k8s-local-frontend-build \
         k8s-local-api-build k8s-local-backend-build \
         k8s-local-data-processing-build \
-        k8s-local-monitoring k8s-local-dashboards k8s-local-grafana
+        k8s-local-monitoring k8s-local-dashboards k8s-local-grafana \
+        k8s-local-queue k8s-local-queue-down
 
 PYTHON ?= python3
 REGISTRY = ghcr.io/okfn-brasil
@@ -157,6 +158,12 @@ k8s-local-monitoring: ## Sobe Prometheus + Grafana + Pushgateway no cluster kind
 
 k8s-local-dashboards: ## Reaplica os dashboards do Grafana (k8s/local/dashboards) no cluster kind local
 	kubectl apply -k k8s/local/dashboards
+
+k8s-local-queue: ## Instala o KEDA e troca a extração para a fila (overlay dev-queue; imagem :tcc-fila)
+	$(PYTHON) scripts/k8s_local_up.py --queue
+
+k8s-local-queue-down: ## Remove a fila de extração e volta ao CronJob data-processing (overlay dev)
+	$(PYTHON) scripts/k8s_local_up.py --queue-down
 
 GRAFANA_PORT ?= 3000
 

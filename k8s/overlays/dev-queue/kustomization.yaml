@@ -1,0 +1,42 @@
+---
+# Overlay dev com a fila de extração (arquitetura proposta). O overlay dev é o
+# baseline (CronJob data-processing). Sobe com `make k8s-local-queue`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../dev
+
+components:
+  - ../../components/queue-pipeline
+
+images:
+  # Imagem com o código da fila, construída e carregada localmente (não está
+  # no GHCR): ver Dockerfile/BASE_TAG no querido-diario-data-processing
+  - name: ghcr.io/okfn-brasil/querido-diario-data-processing
+    newTag: tcc-fila
+
+patches:
+  # Tika sidecar com os mesmos limites menores do Tika do overlay dev (ADR-0010).
+  # O patch do dev aponta para containers/0 do Deployment apache-tika e não
+  # alcança o sidecar
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/initContainers/0/resources/limits/memory
+        value: 1500Mi
+      - op: replace
+        path: /spec/template/spec/initContainers/0/resources/requests/memory
+        value: 512Mi
+    target:
+      kind: Deployment
+      name: extraction-worker
+
+  # Cada worker pede ~1Gi (worker + Tika) e pode chegar a ~2,5Gi: no Docker de
+  # um notebook (~6GB) cabem 2. O teto do componente (6) vale para o Revoada
+  - patch: |-
+      - op: replace
+        path: /spec/maxReplicaCount
+        value: 2
+    target:
+      kind: ScaledObject
+      name: extraction-worker

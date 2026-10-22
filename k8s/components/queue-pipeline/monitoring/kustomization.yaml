@@ -1,0 +1,11 @@
+---
+# PodMonitors da fila, à parte do componente porque o CRD PodMonitor só existe
+# com o monitoramento instalado. O `make k8s-local-queue` aplica quando o CRD
+# existe; com a fila já no ar, aplique depois do `make k8s-local-monitoring`:
+#   kubectl apply -k k8s/components/queue-pipeline/monitoring
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - extraction-worker-podmonitor.yaml
+  - redis-queue-podmonitor.yaml

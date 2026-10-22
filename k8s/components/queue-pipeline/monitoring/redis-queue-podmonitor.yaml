@@ -1,0 +1,18 @@
+---
+# redis_exporter do redis-queue: redis_key_size{key="extraction"} e
+# {key="qd:extraction:dead"}, lidos pelos painéis de fila e DLQ do dashboard
+# qd-pipeline (B3)
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: redis-queue
+  namespace: querido-diario
+  labels:
+    app.kubernetes.io/part-of: queue-pipeline
+spec:
+  selector:
+    matchLabels:
+      app: redis-queue
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 15s

@@ -1,0 +1,108 @@
+---
+# Redis dedicado à fila de extração (ADR-0009). Diferente do Redis do backend
+# (allkeys-lru), não descarta chaves (noeviction) e persiste em disco (AOF),
+# para nenhuma mensagem da fila sumir.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-queue-data
+  namespace: querido-diario
+  labels:
+    app.kubernetes.io/part-of: queue-pipeline
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-queue
+  namespace: querido-diario
+  labels:
+    app.kubernetes.io/part-of: queue-pipeline
+spec:
+  replicas: 1
+  # PVC ReadWriteOnce: o pod antigo precisa sair antes de o novo montar o volume
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: redis-queue
+  template:
+    metadata:
+      labels:
+        app: redis-queue
+    spec:
+      containers:
+        - name: redis
+          image: redis:7
+          command:
+            - redis-server
+            - --port
+            - "6379"
+            - --appendonly
+            - "yes"
+            - --maxmemory
+            - 512mb
+            - --maxmemory-policy
+            - noeviction
+          ports:
+            - containerPort: 6379
+          resources:
+            limits:
+              memory: 640Mi
+            requests:
+              memory: 64Mi
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: redis-queue-data
+              mountPath: /data
+        # Profundidade da fila e da DLQ para o Grafana (redis_key_size). Por
+        # padrão o exporter não exporta o tamanho de chaves específicas
+        - name: redis-exporter
+          image: oliver006/redis_exporter:v1.93.0
+          env:
+            - name: REDIS_ADDR
+              value: redis://localhost:6379
+            - name: REDIS_EXPORTER_CHECK_SINGLE_KEYS
+              value: db0=extraction,db0=qd:extraction:dead
+          ports:
+            - name: metrics
+              containerPort: 9121
+          resources:
+            limits:
+              memory: 64Mi
+            requests:
+              memory: 16Mi
+      volumes:
+        - name: redis-queue-data
+          persistentVolumeClaim:
+            claimName: redis-queue-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-queue
+  namespace: querido-diario
+  labels:
+    app.kubernetes.io/part-of: queue-pipeline
+spec:
+  selector:
+    app: redis-queue
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379

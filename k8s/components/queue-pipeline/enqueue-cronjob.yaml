@@ -1,0 +1,116 @@
+---
+# Produtor da fila: enfileira o id de cada diário não processado que ainda
+# não esteja na fila. Leve: só consulta o Postgres e escreve no Redis.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: enqueue-extraction
+  namespace: querido-diario
+  labels:
+    app.kubernetes.io/part-of: queue-pipeline
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/part-of: queue-pipeline
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: enqueue-extraction
+              image: ghcr.io/okfn-brasil/querido-diario-data-processing:latest
+              command:
+                - python
+                - main
+                - -p
+                - enqueue_extraction
+              envFrom:
+                - configMapRef:
+                    name: app-config
+              env:
+                - name: QUEUE_BROKER_URL
+                  value: redis://redis-queue:6379/0
+                # O push ao Pushgateway troca o grupo job="data-processing"
+                # inteiro e apagaria as métricas do baseline (CronJob)
+                - name: PUSHGATEWAY_URL
+                  value: ""
+                - name: PIPELINE_MODE
+                  value: queue
+                - name: DJANGO_SETTINGS_MODULE
+                  value: ""
+                - name: QUERIDO_DIARIO_OPENSEARCH_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_HOST
+                - name: QUERIDO_DIARIO_OPENSEARCH_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_USER
+                - name: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+                - name: POSTGRES_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QD_DATA_DB_HOST
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QD_DATA_DB_USER
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QD_DATA_DB_PASSWORD
+                - name: STORAGE_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: STORAGE_ACCESS_KEY
+                - name: STORAGE_ACCESS_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: STORAGE_ACCESS_SECRET
+                - name: STORAGE_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: STORAGE_BUCKET
+                - name: OPENSEARCH_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_HOST
+                - name: OPENSEARCH_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_USER
+                - name: OPENSEARCH_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+                # RLIMIT_AS do processo (main/__main__.py) a partir do limite abaixo
+                - name: MEMORY_LIMIT_BYTES
+                  valueFrom:
+                    resourceFieldRef:
+                      containerName: enqueue-extraction
+                      resource: limits.memory
+              resources:
+                limits:
+                  memory: 1Gi
+                requests:
+                  memory: 128Mi
