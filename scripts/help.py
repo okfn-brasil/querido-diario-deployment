@@ -24,6 +24,8 @@ SECTIONS = [
         ("make k8s-local-data-processing-build", "builda o Data Processing local e carrega no kind"),
         ("make k8s-local-monitoring", "sobe Prometheus + Grafana + Pushgateway no kind"),
         ("make k8s-local-grafana", "port-forward Grafana -> localhost:3000 (admin/admin)"),
+        ("make k8s-local-queue", "instala o KEDA e sobe a fila de extração (dev-queue)"),
+        ("make k8s-local-queue-down", "remove a fila e volta ao CronJob (dev)"),
     ]),
     ("Kubernetes (kustomize)", [
         ("make k8s-build-dev", "dry-run overlay dev"),

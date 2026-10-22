@@ -216,6 +216,40 @@ processos batch, como o CronJob `data-processing`: no overlay dev o
 `PUSHGATEWAY_URL` do `app-config` já aponta para ele, e cada execução
 (`make k8s-local-data-processing`) envia as séries `qd_*` ao fim do pipeline.
 
+### Fila de extração (KEDA)
+
+Alternativa ao CronJob `data-processing` (ADR-0009/0010 do
+`querido-diario-estados`): um Redis dedicado (`redis-queue`) recebe o id de
+cada diário não processado e workers (`extraction-worker`, cada um com o Tika
+como sidecar) processam um diário por vez. O KEDA escala os workers pelo
+tamanho da fila, de 0 até o teto (2 no overlay `dev-queue`, para caber no
+Docker de um notebook). Os manifests ficam no componente
+`k8s/components/queue-pipeline`, incluído pelo overlay `k8s/overlays/dev-queue`;
+o overlay `dev` continua sendo o baseline.
+
+A imagem `:tcc-fila` não é publicada no GHCR. No `querido-diario-data-processing`:
+
+```bash
+make -C ../querido-diario-deployment build-data-processing-base   # base:local
+docker buildx build --load --build-arg BASE_TAG=local \
+  -t ghcr.io/okfn-brasil/querido-diario-data-processing:tcc-fila .
+```
+
+Com o cluster de pé:
+
+```bash
+make k8s-local-queue        # instala o KEDA, carrega a imagem e aplica o dev-queue
+kubectl create job --from=cronjob/enqueue-extraction enqueue-manual -n querido-diario
+kubectl get scaledobject,deployment/extraction-worker -n querido-diario -w
+make k8s-local-queue-down   # remove a fila e volta ao CronJob (overlay dev)
+```
+
+O `enqueue-extraction` roda a cada 5 min e o `themes-from-queue` (excertos
+temáticos) a cada hora. Os PodMonitors da fila ficam em
+`k8s/components/queue-pipeline/monitoring`: o `make k8s-local-queue` só os
+aplica se o monitoramento já estiver instalado. Fora do kind, inclua também o
+componente `queue-pipeline-opensearch-ca` (CA interna do OpenSearch).
+
 ### Troubleshooting
 
 **`ctr: content digest sha256:... not found` ao carregar imagens no kind (Mac/Windows)**

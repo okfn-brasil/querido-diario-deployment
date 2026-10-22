@@ -1,0 +1,32 @@
+---
+# Escala o extraction-worker pelo tamanho da fila (ADR-0009): 1 réplica para
+# cada 5 mensagens pendentes, de 0 (custo zero sem trabalho) até o teto.
+# Requer o KEDA (make k8s-local-queue no cluster local).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: extraction-worker
+  namespace: querido-diario
+  labels:
+    app.kubernetes.io/part-of: queue-pipeline
+spec:
+  scaleTargetRef:
+    name: extraction-worker
+  minReplicaCount: 0
+  # Teto pela capacidade do OpenSearch/cluster: calibrar no D5. O overlay
+  # dev-queue reduz para caber no Docker de um notebook
+  maxReplicaCount: 6
+  pollingInterval: 10
+  cooldownPeriod: 120
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 120
+  triggers:
+    - type: redis
+      metadata:
+        address: redis-queue.querido-diario.svc.cluster.local:6379
+        # A fila do Celery no Redis é uma LIST com o nome da fila
+        listName: extraction
+        listLength: "5"

@@ -1,0 +1,150 @@
+---
+# Workers da fila de extração (ADR-0009/0010). Cada pod processa um diário por
+# vez (--concurrency=1), então réplicas = paralelismo. O KEDA controla as
+# réplicas pelo tamanho da fila (scaledobject.yaml), de 0 até o teto.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: extraction-worker
+  namespace: querido-diario
+  labels:
+    app.kubernetes.io/part-of: queue-pipeline
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: extraction-worker
+  template:
+    metadata:
+      labels:
+        app: extraction-worker
+    spec:
+      # SIGTERM faz o Celery terminar o diário atual antes de sair
+      terminationGracePeriodSeconds: 300
+      initContainers:
+        # Tika como native sidecar (ADR-0010): o worker só começa depois de o
+        # Tika responder, e no SIGTERM o Tika só é desligado depois do worker
+        - name: tika
+          image: ghcr.io/okfn-brasil/querido-diario-data-processing/apache-tika:latest
+          restartPolicy: Always
+          # 0.0.0.0, e não 127.0.0.1: o kubelet faz a startupProbe pelo IP do
+          # pod, e a imagem não tem curl/wget para uma probe exec em localhost.
+          # O worker usa localhost:9998 e nenhum Service aponta para o sidecar
+          command:
+            - java
+            - -jar
+            - /tika-server.jar
+            - --host
+            - 0.0.0.0
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: JAVA_TOOL_OPTIONS
+          startupProbe:
+            httpGet:
+              path: /version
+              port: 9998
+            periodSeconds: 5
+            failureThreshold: 24
+          resources:
+            limits:
+              memory: 2500Mi
+            requests:
+              memory: 1200Mi
+      containers:
+        - name: worker
+          image: ghcr.io/okfn-brasil/querido-diario-data-processing:latest
+          command:
+            - celery
+            - -A
+            - work_queue.celery_app
+            - worker
+            - -Q
+            - extraction
+            - --concurrency=1
+            - --loglevel=INFO
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: QUEUE_BROKER_URL
+              value: redis://redis-queue:6379/0
+            - name: APACHE_TIKA_SERVER
+              value: http://localhost:9998
+            - name: PIPELINE_MODE
+              value: queue
+            # Vem do app-config (backend); sem Django, o Celery só emite aviso
+            - name: DJANGO_SETTINGS_MODULE
+              value: ""
+            - name: QUERIDO_DIARIO_OPENSEARCH_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QUERIDO_DIARIO_OPENSEARCH_HOST
+            - name: QUERIDO_DIARIO_OPENSEARCH_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QUERIDO_DIARIO_OPENSEARCH_USER
+            - name: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+            - name: POSTGRES_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QD_DATA_DB_HOST
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QD_DATA_DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QD_DATA_DB_PASSWORD
+            - name: STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: STORAGE_ACCESS_KEY
+            - name: STORAGE_ACCESS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: STORAGE_ACCESS_SECRET
+            - name: STORAGE_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: STORAGE_BUCKET
+            - name: OPENSEARCH_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QUERIDO_DIARIO_OPENSEARCH_HOST
+            - name: OPENSEARCH_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QUERIDO_DIARIO_OPENSEARCH_USER
+            - name: OPENSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+          ports:
+            # /metrics da B2 (start_metrics_server), raspado pelo PodMonitor
+            - name: metrics
+              containerPort: 9100
+          resources:
+            limits:
+              memory: 1Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi

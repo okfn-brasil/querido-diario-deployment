@@ -1,0 +1,94 @@
+---
+# CA interna do OpenSearch (cert-manager) para os pods da fila, para overlays
+# de produção/Revoada que incluam o componente queue-pipeline. Mesmo patch que
+# overlays/production aplica ao CronJob data-processing: sem ele, a indexação
+# falha com erro de TLS fora do kind. Incluir DEPOIS do queue-pipeline:
+#
+#   components:
+#     - ../../components/queue-pipeline
+#     - ../../components/queue-pipeline-opensearch-ca
+#
+# Ainda não validado num cluster com TLS (só com kustomize build).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+patches:
+  # Worker: o initContainer da CA entra antes do Tika sidecar
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/initContainers/0
+        value:
+          name: trust-opensearch-ca
+          image: ghcr.io/okfn-brasil/querido-diario-data-processing:latest
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              cp "$(python3 -c 'import certifi; print(certifi.where())')" /shared/cacert.pem
+              cat /opensearch-ca/ca.crt >> /shared/cacert.pem
+          volumeMounts:
+            - name: certifi-bundle
+              mountPath: /shared
+            - name: opensearch-ca
+              mountPath: /opensearch-ca
+      - op: add
+        path: /spec/template/spec/volumes
+        value:
+          - name: certifi-bundle
+            emptyDir: {}
+          - name: opensearch-ca
+            secret:
+              secretName: opensearch-server-tls
+              items:
+                - key: ca.crt
+                  path: ca.crt
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts
+        value:
+          - name: certifi-bundle
+            mountPath: /usr/local/lib/python3.14/site-packages/certifi/cacert.pem
+            subPath: cacert.pem
+    target:
+      kind: Deployment
+      name: extraction-worker
+
+  # CronJobs da fila: idêntico ao patch do data-processing em overlays/production
+  - patch: |-
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/initContainers
+        value:
+          - name: trust-opensearch-ca
+            image: ghcr.io/okfn-brasil/querido-diario-data-processing:latest
+            command:
+              - sh
+              - -c
+              - |
+                set -e
+                cp "$(python3 -c 'import certifi; print(certifi.where())')" /shared/cacert.pem
+                cat /opensearch-ca/ca.crt >> /shared/cacert.pem
+            volumeMounts:
+              - name: certifi-bundle
+                mountPath: /shared
+              - name: opensearch-ca
+                mountPath: /opensearch-ca
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/volumes
+        value:
+          - name: certifi-bundle
+            emptyDir: {}
+          - name: opensearch-ca
+            secret:
+              secretName: opensearch-server-tls
+              items:
+                - key: ca.crt
+                  path: ca.crt
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/containers/0/volumeMounts
+        value:
+          - name: certifi-bundle
+            mountPath: /usr/local/lib/python3.14/site-packages/certifi/cacert.pem
+            subPath: cacert.pem
+    target:
+      kind: CronJob
+      labelSelector: app.kubernetes.io/part-of=queue-pipeline

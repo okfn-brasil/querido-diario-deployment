@@ -1,0 +1,127 @@
+---
+# Excertos temáticos dos documentos indexados pelos workers, em lotes lidos
+# de qd:themes:pending. Carrega o BERT, então usa os mesmos recursos e
+# ajustes de threads do CronJob data-processing (base/data-processing).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: themes-from-queue
+  namespace: querido-diario
+  labels:
+    app.kubernetes.io/part-of: queue-pipeline
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/part-of: queue-pipeline
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: themes-from-queue
+              image: ghcr.io/okfn-brasil/querido-diario-data-processing:latest
+              command:
+                - python
+                - main
+                - -p
+                - themes_from_queue
+              envFrom:
+                - configMapRef:
+                    name: app-config
+              env:
+                - name: QUEUE_BROKER_URL
+                  value: redis://redis-queue:6379/0
+                # O push ao Pushgateway troca o grupo job="data-processing"
+                # inteiro e apagaria as métricas do baseline (CronJob)
+                - name: PUSHGATEWAY_URL
+                  value: ""
+                - name: PIPELINE_MODE
+                  value: queue
+                - name: DJANGO_SETTINGS_MODULE
+                  value: ""
+                - name: QUERIDO_DIARIO_OPENSEARCH_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_HOST
+                - name: QUERIDO_DIARIO_OPENSEARCH_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_USER
+                - name: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+                - name: POSTGRES_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QD_DATA_DB_HOST
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QD_DATA_DB_USER
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QD_DATA_DB_PASSWORD
+                - name: STORAGE_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: STORAGE_ACCESS_KEY
+                - name: STORAGE_ACCESS_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: STORAGE_ACCESS_SECRET
+                - name: STORAGE_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: STORAGE_BUCKET
+                - name: OPENSEARCH_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_HOST
+                - name: OPENSEARCH_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_USER
+                - name: OPENSEARCH_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secret
+                      key: QUERIDO_DIARIO_OPENSEARCH_PASSWORD
+                # RLIMIT_AS do processo (main/__main__.py) a partir do limite abaixo
+                - name: MEMORY_LIMIT_BYTES
+                  valueFrom:
+                    resourceFieldRef:
+                      containerName: themes-from-queue
+                      resource: limits.memory
+                - name: OPENBLAS_NUM_THREADS
+                  value: "1"
+                - name: OMP_NUM_THREADS
+                  value: "1"
+                - name: MKL_NUM_THREADS
+                  value: "1"
+                - name: NUMEXPR_NUM_THREADS
+                  value: "1"
+                - name: TOKENIZERS_PARALLELISM
+                  value: "false"
+              resources:
+                limits:
+                  memory: 8Gi
+                requests:
+                  memory: 1Gi

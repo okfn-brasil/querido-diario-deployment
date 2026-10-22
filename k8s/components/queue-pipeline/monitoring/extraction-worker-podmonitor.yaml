@@ -1,0 +1,18 @@
+---
+# Métricas qd_* dos workers (B2), com mode="queue". Os pods somem quando o
+# KEDA escala para baixo: nos painéis, usar rate()/increase(), não o valor
+# instantâneo.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: extraction-worker
+  namespace: querido-diario
+  labels:
+    app.kubernetes.io/part-of: queue-pipeline
+spec:
+  selector:
+    matchLabels:
+      app: extraction-worker
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 15s
