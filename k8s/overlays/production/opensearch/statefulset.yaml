@@ -85,6 +85,9 @@ spec:
           # status do cluster aqui já causou um crash loop real: o probe
           # matava o pod repetidamente antes da recuperação terminar,
           # reiniciando a recuperação do zero a cada vez, indefinidamente.
+          # 401 também conta como "vivo": num volume de dados recém-criado o
+          # admin sobe com a senha demo (ver ADR-008) e a probe, autenticando
+          # com a senha do secret, falhava e matava o pod no meio de um restore.
           livenessProbe:
             exec:
               command:
@@ -94,7 +97,7 @@ spec:
                   curl -sk -o /dev/null -w '%{http_code}'
                   -u "admin:$OPENSEARCH_INITIAL_ADMIN_PASSWORD"
                   https://localhost:9200/
-                  | grep -q '^200$'
+                  | grep -Eq '^(200|401)$'
             initialDelaySeconds: 120
             periodSeconds: 30
             timeoutSeconds: 10
@@ -117,7 +120,7 @@ spec:
             timeoutSeconds: 10
             failureThreshold: 30
           volumeMounts:
-            - name: opensearch-data
+            - name: opensearch-data-nvme
               mountPath: /usr/share/opensearch/data
             - name: opensearch-config
               mountPath: /usr/share/opensearch/config/opensearch.yml
@@ -144,12 +147,17 @@ spec:
           persistentVolumeClaim:
             claimName: opensearch-snapshot-repo
   volumeClaimTemplates:
+    # Migrado de ceph-block-hdd (PVC opensearch-data-opensearch-0) para NVMe em
+    # 2026-10-22: com o índice de ~275G muito maior que o page cache, as buscas
+    # levavam 10-20s (I/O-bound) e derrubavam o /health da API. O nome do
+    # template mudou de propósito (volumeClaimTemplates é imutável e assim o PVC
+    # antigo em HDD fica preservado como plano de volta).
     - metadata:
-        name: opensearch-data
+        name: opensearch-data-nvme
       spec:
         accessModes:
           - ReadWriteOnce
-        storageClassName: ceph-block-hdd
+        storageClassName: ceph-block-nvme
         resources:
           requests:
             # ~275G de dados reais + margem sob os watermarks de disco do
