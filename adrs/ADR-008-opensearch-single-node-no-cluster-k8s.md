@@ -158,3 +158,64 @@ serve como certificado de admin, já que o `admin_dn` configurado é o mesmo
    usuários demo não usados (aproveitado aqui: `logstash`, `kibanaserver`,
    `kibanaro`, `readall`, `snapshotrestore`, `anomalyadmin` removidos, só
    `admin` ficou).
+
+## Atualização — Migração do volume de dados para NVMe (2026-10-22)
+
+**Sintoma:** os pods da API ficaram `0/1` (500+ restarts). Eles atendiam
+requisições, mas o `/health` estourava o timeout (mesmo com 10s) porque as
+buscas no OpenSearch levavam 10-20s e ocupavam os workers da API
+(`ReadTimeoutError ... read timeout=30` nos logs; `api-pdb` com
+`minAvailable: 3` travando rollouts e drains).
+
+**Diagnóstico (só leitura):** heap da JVM em 29%, CPU do nó em 4%, mas load
+average ~8 e até 10 buscas simultâneas rodando por 2-19s. O índice
+`queridodiario` (1 shard, 0 réplicas, ~277G) é ~12× maior que os 24Gi do pod,
+então o page cache não cobre as leituras: o gargalo é I/O de disco
+(`ceph-block-hdd`), não heap nem CPU.
+
+**Mudanças:**
+
+1. **Volume de dados em NVMe.** O `volumeClaimTemplates` passou de
+   `opensearch-data` (`ceph-block-hdd`) para `opensearch-data-nvme`
+   (`ceph-block-nvme`, 400Gi). O nome do template mudou de propósito: o
+   campo é imutável, e assim o PVC antigo ficou preservado como plano de volta
+   durante a troca. Mesmo fluxo da migração de 2026-09: snapshot do índice
+   (incremental sobre o anterior, 12G novos, ~8min), `StatefulSet` deletado
+   sem apagar PVCs, recriado com o template novo, restore só do índice
+   `queridodiario` (~297G, ~2h30). Verificado `1.000.724` docs e `276,6gb`,
+   idêntico ao volume antigo.
+2. **Audit log desligado** (`plugins.security.audit.type: noop`). Gerava um
+   índice `security-auditlog-*` por dia (40-175 mil docs/dia) e escrita extra
+   num nó limitado por I/O. Setting estática, exige restart do nó. Os
+   índices antigos não são apagados por isso.
+3. **Readiness da API mais tolerante** (`timeoutSeconds: 10`,
+   `failureThreshold: 6`). Mitigação parcial: sozinha não resolveu, a causa
+   era o I/O do OpenSearch.
+4. **Repositório de snapshot removido.** O PVC `opensearch-snapshot-repo`
+   (300Gi, NVMe), o volume no pod e o `path.repo` do `opensearch.yml` foram
+   removidos, junto com o PVC antigo em HDD. **Consequência: não há mais
+   backup do índice do OpenSearch** nem rotina de snapshot; hoje o dado é
+   reconstruível apenas reprocessando os documentos pelo data-processing.
+   Se voltar a ser necessário, é preciso recriar o PVC e o `path.repo`
+   (setting estático, exige restart) ou usar um repositório S3 no Ceph.
+
+### Gotcha: a `livenessProbe` mata o pod num volume novo (senha demo)
+
+Na troca de volume, o `admin` sobe com a senha demo (ver gotcha acima) e a
+`livenessProbe` autenticava com a senha do secret. O resultado era 401, a
+probe falhava e o kubelet matava o pod ~7 minutos depois (`initialDelaySeconds:
+120` + 10 falhas de 30s), **no meio do restore**, que recomeça do zero. O
+índice ficava `red`, parcial e sem alocação.
+
+- **Fix:** a probe passou a aceitar `200` ou `401` — ela só precisa saber se o
+  processo responde, como o comentário original já dizia.
+- **Após um restore interrompido:** o índice parcial precisa ser apagado
+  (`DELETE /queridodiario`) antes de refazer o restore; o OpenSearch não
+  restaura sobre um índice existente.
+- **Conversão de chave sem `openssl`:** a imagem do OpenSearch tem `python3`,
+  então o PKCS#1 → PKCS#8 do passo 1 do fix da senha pode ser feito dentro do
+  próprio pod, empacotando o DER em `PrivateKeyInfo`, sem tirar a chave de lá.
+  Depois, `hash.sh` + `securityadmin.sh -t internalusers` como descrito acima.
+
+**Resultado:** buscas de teste em 3-5s com o cache ainda frio (antes 10-20s);
+API com os 5 pods `1/1` e sem erros de autenticação ou timeout nos logs.

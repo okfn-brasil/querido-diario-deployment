@@ -134,8 +134,6 @@ spec:
             - name: opensearch-certs
               mountPath: /usr/share/opensearch/config/root-ca.pem
               subPath: ca.crt
-            - name: opensearch-snapshot-repo
-              mountPath: /usr/share/opensearch/snapshots
       volumes:
         - name: opensearch-config
           configMap:
@@ -143,15 +141,12 @@ spec:
         - name: opensearch-certs
           secret:
             secretName: opensearch-server-tls
-        - name: opensearch-snapshot-repo
-          persistentVolumeClaim:
-            claimName: opensearch-snapshot-repo
   volumeClaimTemplates:
     # Migrado de ceph-block-hdd (PVC opensearch-data-opensearch-0) para NVMe em
     # 2026-10-22: com o índice de ~275G muito maior que o page cache, as buscas
     # levavam 10-20s (I/O-bound) e derrubavam o /health da API. O nome do
     # template mudou de propósito (volumeClaimTemplates é imutável e assim o PVC
-    # antigo em HDD fica preservado como plano de volta).
+    # antigo em HDD ficou preservado como plano de volta e foi removido depois).
     - metadata:
         name: opensearch-data-nvme
       spec:
@@ -163,23 +158,6 @@ spec:
             # ~275G de dados reais + margem sob os watermarks de disco do
             # OpenSearch (85%/90%/95%).
             storage: 400Gi
----
-# Repositório fs de snapshot do OpenSearch — usado pra backup manual e para
-# migrações de storage do índice (snapshot pra esse PVC, restore num PVC
-# novo, sem precisar mover 275G+ pela rede). Em SSD (ceph-block-nvme) porque
-# snapshot/restore é I/O-bound e HDD tornava esse processo bem mais lento.
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: opensearch-snapshot-repo
-  namespace: querido-diario
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: ceph-block-nvme
-  resources:
-    requests:
-      storage: 300Gi
 ---
 apiVersion: v1
 kind: Service
