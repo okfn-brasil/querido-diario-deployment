@@ -9,6 +9,8 @@ resources:
   - opensearch/statefulset.yaml
   # CA interna + certificado de servidor (cert-manager) pro TLS do OpenSearch
   - opensearch/certs.yaml
+  # Middleware Traefik api-retry (usado só pelas rotas de produção da API)
+  - traefik-api-retry.yaml
 
 # Defina as imagens com tags fixas para produção (evite :latest)
 images:
@@ -36,7 +38,7 @@ patches:
   - patch: |-
       - op: replace
         path: /spec/replicas
-        value: 2
+        value: 5
     target:
       kind: Deployment
       name: api
@@ -49,19 +51,77 @@ patches:
       kind: Deployment
       name: celery-worker
 
-  # ── API: readiness mais tolerante ──────────────────────────────────────────
-  # As buscas no índice queridodiario (~275G, 1 shard) levam de 10 a 20s e
-  # ocupam os workers da API; com timeout de 5s (default) o /health estoura
-  # e os pods ficam 0/1 mesmo atendendo requisições (visto em 2026-10-22,
-  # com o api-pdb minAvailable=3 bloqueando drains). Mitigação — a causa
-  # (I/O do OpenSearch) continua em investigação.
+  # ── API: recursos, rollout e probes (reconciliado com o cluster) ──────────
+  # Estes valores já estavam em produção (ajustados à mão com kubectl) e
+  # divergiam do repo; um apply do overlay os reverteria. Reconciliado em
+  # 2026-10-23.
+  # - Probes: as buscas no índice queridodiario chegaram a levar 10-20s e
+  #   ocupam os workers da API; com timeout de 5s no /health os pods ficavam
+  #   0/1 mesmo atendendo requisições. Readiness com timeout 10s/6 falhas,
+  #   startupProbe para o boot e liveness por TCP (não depende de /health, que
+  #   pode demorar sob carga, e por isso não mata o pod por lentidão).
+  # - Rollout com maxUnavailable 0 + podAntiAffinity (api-pdb exige
+  #   minAvailable 3 de 5).
   - patch: |-
       - op: add
-        path: /spec/template/spec/containers/0/readinessProbe/timeoutSeconds
-        value: 10
+        path: /spec/strategy
+        value:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 1
+            maxUnavailable: 0
       - op: add
-        path: /spec/template/spec/containers/0/readinessProbe/failureThreshold
-        value: 6
+        path: /spec/template/spec/affinity
+        value:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchExpressions:
+                      - key: app
+                        operator: In
+                        values:
+                          - api
+                  topologyKey: kubernetes.io/hostname
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          limits:
+            cpu: 1500m
+            memory: 4Gi
+          requests:
+            cpu: 150m
+            memory: 1Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/livenessProbe
+        value:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+      - op: replace
+        path: /spec/template/spec/containers/0/readinessProbe
+        value:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 6
+      - op: add
+        path: /spec/template/spec/containers/0/startupProbe
+        value:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 20
     target:
       kind: Deployment
       name: api
@@ -305,6 +365,7 @@ patches:
                 - name: api-rate-limit
                 - name: security-headers
                 - name: compression
+                - name: api-retry
               services:
                 - name: api
                   port: 8080
@@ -313,6 +374,7 @@ patches:
               priority: 200
               middlewares:
                 - name: www-to-non-www
+                - name: api-retry
               services:
                 - name: api
                   port: 8080
@@ -322,6 +384,7 @@ patches:
               middlewares:
                 - name: cors-redirect
                 - name: api-redirect
+                - name: api-retry
               services:
                 - name: api
                   port: 8080

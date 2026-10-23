@@ -1,0 +1,13 @@
+---
+# Retry automático nas rotas da API: absorve falhas transitórias de um pod
+# (p. ex. durante rollouts ou quando um backend não está pronto). Já existia
+# no cluster, criado à mão; versionado aqui em 2026-10-23.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: api-retry
+  namespace: querido-diario
+spec:
+  retry:
+    attempts: 3
+    initialInterval: 500ms
