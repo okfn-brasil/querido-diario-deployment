@@ -56,6 +56,7 @@ Todas em `adrs/`. Leia antes de propor mudanças estruturais:
 | ADR-006 | Garage como storage S3-compatível em desenvolvimento local |
 | ADR-007 | Terminação SSL: cert-manager + Let's Encrypt (não `tls.certResolver` do Traefik) |
 | ADR-008 | OpenSearch single-node dentro do cluster k8s em produção (StatefulSet, sem HA) |
+| ADR-009 | GitHub App da org para bump automatizado de imagens em produção (proposto) |
 
 ---
 
