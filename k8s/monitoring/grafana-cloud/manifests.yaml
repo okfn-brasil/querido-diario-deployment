@@ -1,0 +1,1015 @@
+# GERADO por scripts/grafana_cloud_render.py (`make grafana-cloud-render`)
+# a partir de grafana/k8s-monitoring 4.5.3 + values.yaml. Não editar à mão.
+
+---
+# Source: k8s-monitoring/charts/alloy-operator/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana-cloud-alloy-operator
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: alloy-operator-0.8.0
+    app.kubernetes.io/name: alloy-operator
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "1.13.0"
+    app.kubernetes.io/managed-by: Helm
+automountServiceAccountToken: true
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/beyla/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana-cloud-beyla-cache
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: beyla-1.16.11
+    app.kubernetes.io/name: beyla-cache
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "3.32.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: beyla
+    app.kubernetes.io/component: rbac
+automountServiceAccountToken: true
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/kube-state-metrics/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+automountServiceAccountToken: true
+metadata:
+  labels:    
+    helm.sh/chart: kube-state-metrics-8.6.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "2.20.0"
+    release: grafana-cloud
+  name: grafana-cloud-kube-state-metrics
+  namespace: querido-diario
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana-cloud-k8s-injection-controller
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/webhook/serving-cert-secret.yaml
+# Persistence layer for the controller-managed webhook serving certificate. The
+# in-process cert rotator (see --enable-cert-rotation) populates ca.crt/ca.key/tls.crt/
+# tls.key here; it updates this Secret but never creates it, so the chart
+# pre-creates it empty. Only rendered when cert-manager is not in use.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-cloud-k8s-injection-controller-serving-cert
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/sdk-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-cloud-k8s-injection-controller-sdk-config
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  # config.SDKInject document consumed by the controller via --config. The
+  # controller selects matching workloads but performs no mutation when this is
+  # absent (image_volume_root empty).
+  sdk-inject.yaml: |
+    debug: false
+    image_volume_root: ghcr.io/grafana/beyla/inject-sdk-image
+    image_version: "0.0.13"
+    injection_mode: auto
+    propagators:
+      - tracecontext
+      - baggage
+    export:
+      traces: true
+      metrics: true
+      logs: false
+    enabled_sdks:
+      - nodejs
+      - python
+      - java
+      - dotnet
+---
+# Source: k8s-monitoring/templates/alloy-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-cloud-alloy
+  namespace: querido-diario
+data:
+  config.alloy: |
+    remote.kubernetes.secret "alloy_remote_cfg" {
+      name      = "grafana-cloud-credentials"
+      namespace = "querido-diario"
+    } // remote.kubernetes.secret "alloy_remote_cfg"
+    
+    remotecfg {
+      id = string.format("grafana-cloud-%s-%s-%s-%s", "revoada-qd", "querido-diario", "alloy", sys.env("K8S_NODE_NAME"))
+      url = "https://fleet-management-prod-015.grafana.net"
+      basic_auth {
+        username = convert.nonsensitive(remote.kubernetes.secret.alloy_remote_cfg.data["username"])
+        password = remote.kubernetes.secret.alloy_remote_cfg.data["password"]
+      }
+      tls_config {
+        insecure_skip_verify = false
+        ca_pem = convert.nonsensitive(remote.kubernetes.secret.alloy_remote_cfg.data["ca"])
+        cert_pem = convert.nonsensitive(remote.kubernetes.secret.alloy_remote_cfg.data["cert"])
+        key_pem = remote.kubernetes.secret.alloy_remote_cfg.data["key"]
+      }
+      poll_frequency = "30s"
+      attributes = {
+        "cluster" = "revoada-qd",
+        "namespace" = "querido-diario",
+        "platform" = "kubernetes",
+        "presets" = "large,root,host-network,host-storage,host-cgroup,clustered,service-discovery,filesystem-log-reader,daemonset,otel-receiver",
+        "release" = "grafana-cloud",
+        "service-discovery" = "true",
+        "source" = "k8s-monitoring",
+        "sourceVersion" = "4.5.3",
+        "workloadName" = "alloy",
+        "workloadType" = "daemonset",
+      }
+    }
+---
+# Source: k8s-monitoring/charts/alloy-operator/templates/rbac/leader-election.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: grafana-cloud-alloy-operator-leader-election-role
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: alloy-operator-0.8.0
+    app.kubernetes.io/name: alloy-operator
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "1.13.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/rbac/configmap-reader-rbac.yaml
+# Grants the controller get/list/watch on ConfigMaps in the watched namespace
+# (where Beyla writes its injection-config ConfigMaps). The controller's
+# ConfigMap informer LISTs this namespace on startup, so it must be allowed
+# even when the watch namespace differs from the controller's own namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: grafana-cloud-k8s-injection-controller-configmap-reader
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/rbac/leader-election-rbac.yaml
+# Permissions to perform leader election in the controller's own namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: grafana-cloud-k8s-injection-controller-leader-election-role
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/rbac/manager-rbac.yaml
+# Self-managed webhook cert: the rotator persists the serving cert into a Secret
+# in the controller's own namespace. list/watch cannot be name-scoped (the
+# rotator's cache lists Secrets in this namespace); get/update are.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: grafana-cloud-k8s-injection-controller-cert-rotator-role
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  resourceNames:
+  - grafana-cloud-k8s-injection-controller-serving-cert
+  verbs:
+  - get
+  - update
+---
+# Source: k8s-monitoring/templates/sdk-injector-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: grafana-cloud-alloy-sdk-injector
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: k8s-monitoring-4.5.3
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alloy
+    app.kubernetes.io/component: rbac
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update"]
+---
+# Source: k8s-monitoring/charts/alloy-operator/templates/rbac/leader-election.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: grafana-cloud-alloy-operator-leader-election-rolebinding
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: alloy-operator-0.8.0
+    app.kubernetes.io/name: alloy-operator
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "1.13.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: grafana-cloud-alloy-operator-leader-election-role
+subjects:
+  - kind: ServiceAccount
+    name: grafana-cloud-alloy-operator
+    namespace: querido-diario
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/rbac/configmap-reader-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: grafana-cloud-k8s-injection-controller-configmap-reader
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: grafana-cloud-k8s-injection-controller-configmap-reader
+subjects:
+- kind: ServiceAccount
+  name: grafana-cloud-k8s-injection-controller
+  namespace: querido-diario
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/rbac/leader-election-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: grafana-cloud-k8s-injection-controller-leader-election-rolebinding
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: grafana-cloud-k8s-injection-controller-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: grafana-cloud-k8s-injection-controller
+  namespace: querido-diario
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/rbac/manager-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: grafana-cloud-k8s-injection-controller-cert-rotator-rolebinding
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: grafana-cloud-k8s-injection-controller-cert-rotator-role
+subjects:
+- kind: ServiceAccount
+  name: grafana-cloud-k8s-injection-controller
+  namespace: querido-diario
+---
+# Source: k8s-monitoring/templates/sdk-injector-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: grafana-cloud-alloy-sdk-injector
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: k8s-monitoring-4.5.3
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alloy
+    app.kubernetes.io/component: rbac
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: grafana-cloud-alloy-sdk-injector
+subjects:
+  - kind: ServiceAccount
+    name: grafana-cloud-alloy
+    namespace: querido-diario
+---
+# Source: k8s-monitoring/charts/alloy-operator/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-cloud-alloy-operator
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: alloy-operator-0.8.0
+    app.kubernetes.io/name: alloy-operator
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "1.13.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http
+      protocol: TCP
+    - name: metrics
+      port: 8082
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: alloy-operator
+    app.kubernetes.io/instance: grafana-cloud
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/beyla/templates/cache-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: beyla-k8s-cache
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: beyla-1.16.11
+    app.kubernetes.io/name: beyla-k8s-cache
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "3.32.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: beyla
+    app.kubernetes.io/component: networking
+spec:
+  ports:
+    - port: 50055
+      protocol: TCP
+      targetPort: grpc
+      name: grpc
+  selector:
+    app.kubernetes.io/name: beyla-k8s-cache
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/kube-state-metrics/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-cloud-kube-state-metrics
+  namespace: querido-diario
+  labels:    
+    helm.sh/chart: kube-state-metrics-8.6.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "2.20.0"
+    release: grafana-cloud
+  annotations:
+spec:
+  type: "ClusterIP"
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: http
+  selector:    
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: grafana-cloud
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/webhook/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-cloud-k8s-injection-controller-webhook
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 9443
+  selector:
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+---
+# Source: k8s-monitoring/templates/receiver-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-cloud-otel-receiver
+  labels:
+    
+    helm.sh/chart: k8s-monitoring-4.5.3
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: alloy
+    app.kubernetes.io/component: networking
+spec:
+  type: ClusterIP
+  selector:
+    
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/instance: grafana-cloud-alloy
+  internalTrafficPolicy: Cluster
+  ports:
+    - name: http-metrics
+      port: 12345
+      targetPort: 12345
+      protocol: "TCP"
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+      appProtocol: grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
+      appProtocol: http
+---
+# Source: k8s-monitoring/charts/alloy-operator/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-cloud-alloy-operator
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: alloy-operator-0.8.0
+    app.kubernetes.io/name: alloy-operator
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "1.13.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alloy-operator
+      app.kubernetes.io/instance: grafana-cloud
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: alloy-operator-0.8.0
+        app.kubernetes.io/name: alloy-operator
+        app.kubernetes.io/instance: grafana-cloud
+        app.kubernetes.io/version: "1.13.0"
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      serviceAccountName: grafana-cloud-alloy-operator
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: alloy-operator
+          image: "ghcr.io/grafana/alloy-operator:1.13.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=:8082
+            - --leader-elect
+            - --leader-election-id=grafana-cloud-alloy-operator
+
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+            - name: metrics
+              containerPort: 8082
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits: {}
+            requests: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+      nodeSelector:
+        kubernetes.io/os: linux
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/beyla/templates/cache-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beyla-k8s-cache
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: beyla-1.16.11
+    app.kubernetes.io/name: beyla-k8s-cache
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "3.32.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: beyla
+    app.kubernetes.io/component: workload
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: beyla-k8s-cache
+  template:
+    metadata:
+      labels:
+        helm.sh/chart: beyla-1.16.11
+        app.kubernetes.io/name: beyla-k8s-cache
+        app.kubernetes.io/instance: grafana-cloud
+        app.kubernetes.io/version: "3.32.0"
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/part-of: beyla
+    spec:
+      serviceAccountName: grafana-cloud-beyla-cache
+      containers:
+        - name: beyla-cache
+          image: docker.io/grafana/beyla-k8s-cache:3.32.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 50055
+              protocol: TCP
+              name: grpc
+          env:
+            - name: BEYLA_K8S_CACHE_PORT
+              value: "50055"
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/kube-state-metrics/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-cloud-kube-state-metrics
+  namespace: querido-diario
+  labels:    
+    helm.sh/chart: kube-state-metrics-8.6.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "2.20.0"
+    release: grafana-cloud
+spec:
+  selector:
+    matchLabels:      
+      app.kubernetes.io/name: kube-state-metrics
+      app.kubernetes.io/instance: grafana-cloud
+  replicas: 1
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 10
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: metrics
+        app.kubernetes.io/instance: grafana-cloud
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: kube-state-metrics
+        app.kubernetes.io/part-of: kube-state-metrics
+        app.kubernetes.io/version: 2.20.0
+        release: grafana-cloud
+      annotations:
+      
+        k8s.grafana.com/logs.job: integrations/kubernetes/kube-state-metrics
+    spec:
+      automountServiceAccountToken: true
+      hostNetwork: false
+      serviceAccountName: grafana-cloud-kube-state-metrics
+      securityContext:
+        fsGroup: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      dnsPolicy: ClusterFirst
+      containers:
+      - name: kube-state-metrics
+        args:
+        - --port=8080
+        - --resources=certificatesigningrequests,configmaps,cronjobs,daemonsets,deployments,endpointslices,horizontalpodautoscalers,ingresses,jobs,leases,limitranges,mutatingwebhookconfigurations,namespaces,networkpolicies,nodes,persistentvolumeclaims,persistentvolumes,poddisruptionbudgets,pods,replicasets,replicationcontrollers,resourcequotas,secrets,services,statefulsets,storageclasses,validatingwebhookconfigurations,volumeattachments
+        - --metric-labels-allowlist=nodes=[agentpool,alpha.eksctl.io/cluster-name,alpha.eksctl.io/nodegroup-name,beta.kubernetes.io/instance-type,cloud.google.com/gke-nodepool,cluster-name,ec2.amazonaws.com/Name,ec2.amazonaws.com/aws-autoscaling-groupName,ec2.amazonaws.com/aws-autoscaling-group-name,ec2.amazonaws.com/name,eks.amazonaws.com/nodegroup,k8s.io/cloud-provider-aws,karpenter.sh/nodepool,kubernetes.azure.com/cluster,kubernetes.io/arch,kubernetes.io/hostname,kubernetes.io/os,node.kubernetes.io/instance-type,topology.kubernetes.io/region,topology.kubernetes.io/zone]
+        imagePullPolicy: IfNotPresent
+        image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8081
+          name: metrics
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /livez
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /readyz
+            port: metrics
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+          {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+      nodeSelector:
+        kubernetes.io/os: linux
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-cloud-k8s-injection-controller
+  namespace: querido-diario
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-injection-controller
+      app.kubernetes.io/instance: grafana-cloud
+      control-plane: controller-manager
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+        # Roll the pod whenever the mounted SDK config changes.
+        checksum/sdk-config: 2f6bdfa392bf50f9440fd89dc6d3232af0a1c870bec292888e19a5f2c91d5262
+        # Advertise the metrics endpoint for annotation-based Prometheus discovery.
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+      labels:
+        app.kubernetes.io/name: k8s-injection-controller
+        app.kubernetes.io/instance: grafana-cloud
+        control-plane: controller-manager
+    spec:
+      serviceAccountName: grafana-cloud-k8s-injection-controller
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: manager
+          image: "ghcr.io/grafana/k8s-injection-controller:0.2.0"
+          imagePullPolicy: IfNotPresent
+          command:
+            - /manager
+          args:
+            - --health-probe-bind-address=:8081
+            - --leader-elect
+            - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+            - --enable-cert-rotation
+            - --webhook-cert-secret=grafana-cloud-k8s-injection-controller-serving-cert
+            - --mutating-webhook-name=grafana-cloud-k8s-injection-controller-mutating-webhook
+            - --validating-webhook-name=grafana-cloud-k8s-injection-controller-validating-webhook
+            - --metrics-bind-address=:8080
+            - --metrics-secure=false
+            - --config=/etc/beyla-injector/sdk-inject.yaml
+          env:
+            # Dialed by the controller before its first eviction sweep so it
+            # waits for the webhook Service VIP to be programmed.
+            - name: WEBHOOK_SERVICE_ADDR
+              value: grafana-cloud-k8s-injection-controller-webhook.querido-diario.svc:443
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: WATCH_NAMESPACE
+              value: "querido-diario"
+            - name: ALLOWED_CONFIGMAP_WRITERS
+              value: "system:serviceaccount:querido-diario:grafana-cloud-alloy"
+          ports:
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+            - name: webhook-server
+              containerPort: 9443
+              protocol: TCP
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 64Mi
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /tmp/k8s-webhook-server/serving-certs
+              # Read-only in both modes. In self-signed mode the cert rotator
+              # writes the Secret via the API (not this dir); the kubelet projects
+              # it here. cert-controller never writes the cert dir itself.
+              readOnly: true
+            - name: sdk-config
+              mountPath: /etc/beyla-injector
+              readOnly: true
+      volumes:
+        - name: webhook-certs
+          # Mount the serving-cert Secret in both modes. cert-manager populates
+          # it in cert-manager mode; the in-process cert rotator populates it in
+          # self-signed mode. cert-controller writes only the Secret (via the
+          # API) and waits for the kubelet to project it onto disk here — it does
+          # NOT write the cert dir, so a writable emptyDir would never get a cert
+          # and the rotator's readiness gate would never fire.
+          secret:
+            secretName: grafana-cloud-k8s-injection-controller-serving-cert
+        - name: sdk-config
+          configMap:
+            name: grafana-cloud-k8s-injection-controller-sdk-config
+---
+# Source: k8s-monitoring/templates/alloy.yaml
+apiVersion: collectors.grafana.com/v1alpha1
+kind: Alloy
+metadata:
+  name: grafana-cloud-alloy
+  namespace: querido-diario
+  annotations:
+    helm.sdk.operatorframework.io/uninstall-wait: "true"
+spec:
+  alloy:
+    clustering:
+      enabled: true
+      name: alloy
+    configMap:
+      create: false
+    extraEnv:
+    - name: NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: CLUSTER_NAME
+      value: revoada-qd
+    - name: GCLOUD_RW_API_KEY
+      valueFrom:
+        secretKeyRef:
+          key: password
+          name: grafana-cloud-credentials
+    extraPorts:
+    - appProtocol: grpc
+      name: otlp-grpc
+      port: 4317
+      protocol: TCP
+      targetPort: 4317
+    - appProtocol: http
+      name: otlp-http
+      port: 4318
+      protocol: TCP
+      targetPort: 4318
+    mounts:
+      dockercontainers: true
+      extra:
+      - mountPath: /var/lib/alloy
+        name: alloy-storage
+        readOnly: false
+      - mountPath: /sys/fs/cgroup
+        name: cgroup
+      varlog: true
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+    securityContext:
+      allowPrivilegeEscalation: true
+      capabilities:
+        add:
+        - CHOWN
+        - DAC_OVERRIDE
+        - FOWNER
+        - FSETID
+        - KILL
+        - SETGID
+        - SETUID
+        - SETPCAP
+        - NET_BIND_SERVICE
+        - NET_RAW
+        - SYS_CHROOT
+        - MKNOD
+        - AUDIT_WRITE
+        - SETFCAP
+        drop:
+        - ALL
+      privileged: true
+      runAsGroup: 0
+      runAsUser: 0
+      seccompProfile:
+        type: RuntimeDefault
+    storagePath: /var/lib/alloy
+  controller:
+    dnsPolicy: ClusterFirstWithHostNet
+    hostNetwork: true
+    hostPID: true
+    nodeSelector:
+      kubernetes.io/os: linux
+    podAnnotations:
+      k8s.grafana.com/logs.job: integrations/alloy
+    tolerations:
+    - effect: NoSchedule
+      operator: Exists
+    type: daemonset
+    volumes:
+      extra:
+      - hostPath:
+          path: /var/lib/alloy
+          type: DirectoryOrCreate
+        name: alloy-storage
+      - hostPath:
+          path: /sys/fs/cgroup
+          type: Directory
+        name: cgroup
+  crds:
+    create: false
+  nameOverride: alloy

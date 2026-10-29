@@ -1,0 +1,65 @@
+# Valores do chart grafana/k8s-monitoring (Grafana Cloud) — produção (Revoada).
+# Instalação via Helm (não é Kustomize): `make grafana-cloud-install`.
+# Ver docs/grafana-cloud.md.
+#
+# Equivale ao comando gerado pelo Grafana Cloud (Fleet Management). A
+# configuração dos coletores e destinos é entregue remotamente pelo Fleet
+# Management; o chart só sobe o Alloy e os serviços de telemetria.
+#
+# Requer o Secret `grafana-cloud-credentials` no namespace querido-diario,
+# criado manualmente (nunca versionar valores — ver
+# k8s/overlays/production/grafana-cloud-credentials.example.yaml).
+
+cluster:
+  name: revoada-qd
+
+collectorCommon:
+  alloy:
+    remoteConfig:
+      enabled: true
+      url: https://fleet-management-prod-015.grafana.net
+      auth:
+        type: basic
+      secret:
+        create: false
+        name: grafana-cloud-credentials
+        namespace: querido-diario
+
+collectors:
+  alloy:
+    presets:
+      - large
+      - root
+      - host-network
+      - host-storage
+      - host-cgroup
+      - clustered
+      - service-discovery
+      - filesystem-log-reader
+      - daemonset
+      - otel-receiver
+    extraService:
+      enabled: true
+      name: otel-receiver
+
+telemetryServices:
+  # Desligado em produção: no Revoada o node-exporter nosso fica Pending (porta
+  # do host já ocupada em 1 nó e NodeAffinity não satisfeita nos outros 5).
+  # Mantenha `deploy: true` em execuções locais.
+  node-exporter:
+    deploy: false
+
+  kube-state-metrics:
+    deploy: true
+
+  beyla:
+    deploy: true
+    k8sCache:
+      replicas: 1
+
+  opencost:
+    deploy: false
+
+  sdkInjector:
+    deploy: true
+    allowedConfigMapWriters: system:serviceaccount:querido-diario:grafana-cloud-alloy
