@@ -237,6 +237,16 @@ make k8s-apply-prod
 
 ---
 
+### 5. Monitoramento (Grafana Cloud)
+
+Já incluído no overlay de produção (`k8s/monitoring/grafana-cloud/`, chart
+`grafana/k8s-monitoring` renderizado em YAML estático) e aplicado pelo
+`make k8s-apply-prod`. Requer o secret `grafana-cloud-credentials` (template em
+`overlays/production/grafana-cloud-credentials.example.yaml`). Para regenerar o
+YAML: `make grafana-cloud-render`. Os recursos de escopo de cluster ficam em
+`cluster-scoped.yaml` e precisam ser aplicados antes pelo admin. Detalhes em
+[`docs/grafana-cloud.md`](../docs/grafana-cloud.md).
+
 ## Referência rápida
 
 ```bash

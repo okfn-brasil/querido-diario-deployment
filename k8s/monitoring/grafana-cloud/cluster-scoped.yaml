@@ -1,0 +1,557 @@
+# GERADO por scripts/grafana_cloud_render.py (`make grafana-cloud-render`)
+# a partir de grafana/k8s-monitoring 4.5.3 + values.yaml. Não editar à mão.
+
+---
+# Source: k8s-monitoring/charts/alloy-operator/charts/alloy-crd/crds/collectors.grafana.com_alloy.yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: alloys.collectors.grafana.com
+spec:
+  group: collectors.grafana.com
+  names:
+    kind: Alloy
+    listKind: AlloyList
+    plural: alloys
+    singular: alloy
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Alloy is the Schema for the alloys API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec defines the desired state of Alloy
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: Status defines the observed state of Alloy
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+# Source: k8s-monitoring/charts/alloy-operator/templates/rbac/alloy-manager.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grafana-cloud-alloy-operator-alloy-manager
+  labels:
+    helm.sh/chart: alloy-operator-0.8.0
+    app.kubernetes.io/name: alloy-operator
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "1.13.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+  - apiGroups:
+      - collectors.grafana.com
+    resources:
+      - alloys
+      - alloys/status
+      - alloys/finalizers
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+---
+# Source: k8s-monitoring/charts/alloy-operator/templates/rbac/alloy-objects.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grafana-cloud-alloy-operator
+rules:
+  # Rules which allow the management of ConfigMaps, ServiceAccounts, and Services.
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets", "serviceaccounts", "services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Rules which allow the management of DaemonSets, Deployments, and StatefulSets.
+  - apiGroups: ["apps"]
+    resources: ["daemonsets", "deployments", "statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Rules which allow the management of Horizontal Pod Autoscalers.
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Rules which allow the management of Ingresses and NetworkPolicies.
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Rules which allow the management of PodDisruptionBudgets.
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Rules which allow the management of ClusterRoles, ClusterRoleBindings, Roles, and RoleBindings.
+  # `bind` and `escalate` are required so the operator can create ClusterRoles/Roles for the Alloy
+  # instances it manages. Kubernetes' privilege-escalation prevention requires the creator to either
+  # already hold every permission it grants, or to have `escalate` (for roles) and `bind` (for
+  # rolebindings). The operator's role doesn't enumerate every permission Alloy ever needs, so these
+  # two verbs are required for the operator to function. `impersonate` and other dangerous verbs are
+  # intentionally omitted.
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "bind", "escalate"]
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/beyla/templates/cluster-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grafana-cloud-beyla-cache
+  labels:
+    helm.sh/chart: beyla-1.16.11
+    app.kubernetes.io/name: beyla-cache
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "3.32.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: beyla
+    app.kubernetes.io/component: rbac
+rules:
+  - apiGroups: [ "apps" ]
+    resources: [ "replicasets" ]
+    verbs: [ "list", "watch" ]
+  - apiGroups: [ "" ]
+    resources: [ "pods", "services", "nodes" ]
+    verbs: [ "list", "watch", "get" ]
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/kube-state-metrics/templates/role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:    
+    helm.sh/chart: kube-state-metrics-8.6.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "2.20.0"
+    release: grafana-cloud
+  name: grafana-cloud-kube-state-metrics
+rules:
+
+- apiGroups: ["certificates.k8s.io"]
+  resources:
+  - certificatesigningrequests
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - configmaps
+  verbs: ["list", "watch"]
+
+- apiGroups: ["batch"]
+  resources:
+  - cronjobs
+  verbs: ["list", "watch"]
+
+- apiGroups: ["apps"]
+  resources:
+  - daemonsets
+  verbs: ["list", "watch"]
+
+- apiGroups: ["apps"]
+  resources:
+  - deployments
+  verbs: ["list", "watch"]
+
+- apiGroups: ["discovery.k8s.io"]
+  resources:
+  - endpointslices
+  verbs: ["list", "watch"]
+
+- apiGroups: ["autoscaling"]
+  resources:
+  - horizontalpodautoscalers
+  verbs: ["list", "watch"]
+
+- apiGroups: ["networking.k8s.io"]
+  resources:
+  - ingresses
+  verbs: ["list", "watch"]
+
+- apiGroups: ["batch"]
+  resources:
+  - jobs
+  verbs: ["list", "watch"]
+
+- apiGroups: ["coordination.k8s.io"]
+  resources:
+  - leases
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - limitranges
+  verbs: ["list", "watch"]
+
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources:
+    - mutatingwebhookconfigurations
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - namespaces
+  verbs: ["list", "watch"]
+
+- apiGroups: ["networking.k8s.io"]
+  resources:
+  - networkpolicies
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - nodes
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - persistentvolumeclaims
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - persistentvolumes
+  verbs: ["list", "watch"]
+
+- apiGroups: ["policy"]
+  resources:
+    - poddisruptionbudgets
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - pods
+  verbs: ["list", "watch"]
+
+- apiGroups: ["apps"]
+  resources:
+  - replicasets
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - replicationcontrollers
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - resourcequotas
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - secrets
+  verbs: ["list", "watch"]
+
+- apiGroups: [""]
+  resources:
+  - services
+  verbs: ["list", "watch"]
+
+- apiGroups: ["apps"]
+  resources:
+  - statefulsets
+  verbs: ["list", "watch"]
+
+- apiGroups: ["storage.k8s.io"]
+  resources:
+    - storageclasses
+  verbs: ["list", "watch"]
+
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources:
+    - validatingwebhookconfigurations
+  verbs: ["list", "watch"]
+
+- apiGroups: ["storage.k8s.io"]
+  resources:
+    - volumeattachments
+  verbs: ["list", "watch"]
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/rbac/manager-rbac.yaml
+# Cluster-wide permissions: resolve pod owner chains, evict pods and trigger
+# workload rollouts so matching pods get re-admitted and instrumented.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grafana-cloud-k8s-injection-controller-manager-role
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  - deployments
+  - statefulsets
+  verbs:
+  - patch
+- apiGroups:
+  - apps
+  resources:
+  - replicasets
+  verbs:
+  - get
+  - list
+  - watch
+# Self-managed webhook cert: the in-process rotator watches the webhook
+# configurations and injects the caBundle. list/watch cannot be name-scoped;
+# the mutating writes are scoped by resourceNames to this release's configs.
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  resourceNames:
+  - grafana-cloud-k8s-injection-controller-mutating-webhook
+  - grafana-cloud-k8s-injection-controller-validating-webhook
+  verbs:
+  - update
+  - patch
+---
+# Source: k8s-monitoring/charts/alloy-operator/templates/rbac/alloy-manager.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-cloud-alloy-operator-alloy-manager
+  labels:
+    helm.sh/chart: alloy-operator-0.8.0
+    app.kubernetes.io/name: alloy-operator
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "1.13.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: grafana-cloud-alloy-operator-alloy-manager
+subjects:
+  - kind: ServiceAccount
+    name: grafana-cloud-alloy-operator
+    namespace: querido-diario
+---
+# Source: k8s-monitoring/charts/alloy-operator/templates/rbac/alloy-objects.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-cloud-alloy-operator
+  labels:
+    helm.sh/chart: alloy-operator-0.8.0
+    app.kubernetes.io/name: alloy-operator
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "1.13.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: grafana-cloud-alloy-operator
+subjects:
+  - kind: ServiceAccount
+    name: grafana-cloud-alloy-operator
+    namespace: querido-diario
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/beyla/templates/cluster-role-binding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-cloud-beyla-cache
+  labels:
+    helm.sh/chart: beyla-1.16.11
+    app.kubernetes.io/name: beyla-cache
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "3.32.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/part-of: beyla
+    app.kubernetes.io/component: rbac
+subjects:
+  - kind: ServiceAccount
+    name: grafana-cloud-beyla-cache
+    namespace: querido-diario
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: grafana-cloud-beyla-cache
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/kube-state-metrics/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:    
+    helm.sh/chart: kube-state-metrics-8.6.0
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/part-of: kube-state-metrics
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/instance: grafana-cloud
+    app.kubernetes.io/version: "2.20.0"
+    release: grafana-cloud
+  name: grafana-cloud-kube-state-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: grafana-cloud-kube-state-metrics
+subjects:
+- kind: ServiceAccount
+  name: grafana-cloud-kube-state-metrics
+  namespace: querido-diario
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/rbac/manager-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-cloud-k8s-injection-controller-manager-rolebinding
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: grafana-cloud-k8s-injection-controller-manager-role
+subjects:
+- kind: ServiceAccount
+  name: grafana-cloud-k8s-injection-controller
+  namespace: querido-diario
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/webhook/webhook-configuration.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: grafana-cloud-k8s-injection-controller-mutating-webhook
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+webhooks:
+- name: mpod-v1.beyla.grafana.com
+  admissionReviewVersions:
+  - v1
+  sideEffects: None
+  # A broken injector must never block pod creation.
+  failurePolicy: Ignore
+  clientConfig:
+    service:
+      name: grafana-cloud-k8s-injection-controller-webhook
+      namespace: querido-diario
+      path: /mutate--v1-pod
+  namespaceSelector:
+    matchExpressions:
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+        - kube-system
+        - kube-public
+        - kube-node-lease
+        - cert-manager
+        - monitoring
+        - local-path-storage
+        - grafana-alloy
+        - gke-connect
+        - gke-gmp-system
+        - gke-managed-cim
+        - gke-managed-filestorecsi
+        - gke-managed-metrics-server
+        - gke-managed-system
+        - gke-system
+        - gke-managed-volumepopulator
+        - gatekeeper-system
+        - querido-diario
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - pods
+---
+# Source: k8s-monitoring/charts/telemetryServices/charts/sdkInjector/templates/webhook/webhook-configuration.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: grafana-cloud-k8s-injection-controller-validating-webhook
+  labels:
+    helm.sh/chart: sdkInjector-0.2.1
+    app.kubernetes.io/name: k8s-injection-controller
+    app.kubernetes.io/instance: grafana-cloud
+    control-plane: controller-manager
+    app.kubernetes.io/version: "0.2.0"
+    app.kubernetes.io/managed-by: Helm
+webhooks:
+- name: vconfigmap-v1.beyla.grafana.com
+  admissionReviewVersions:
+  - v1
+  sideEffects: None
+  # Scoped to the single watched namespace, which is what makes failurePolicy
+  # Fail safe: a validator outage can only block ConfigMap writes there.
+  failurePolicy: Fail
+  clientConfig:
+    service:
+      name: grafana-cloud-k8s-injection-controller-webhook
+      namespace: querido-diario
+      path: /validate--v1-configmap
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: querido-diario
+  matchConditions:
+  - name: exclude-kube-root-ca
+    expression: "object.metadata.name != 'kube-root-ca.crt'"
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - configmaps

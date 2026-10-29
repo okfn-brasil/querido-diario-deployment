@@ -11,6 +11,10 @@ resources:
   - opensearch/certs.yaml
   # Middleware Traefik api-retry (usado só pelas rotas de produção da API)
   - traefik-api-retry.yaml
+  # Grafana Cloud (chart grafana/k8s-monitoring renderizado em YAML estático).
+  # Exige o Secret `grafana-cloud-credentials`, criado manualmente — template em
+  # grafana-cloud-credentials.example.yaml; docs em docs/grafana-cloud.md.
+  - ../../monitoring/grafana-cloud
 
 # Defina as imagens com tags fixas para produção (evite :latest)
 images:

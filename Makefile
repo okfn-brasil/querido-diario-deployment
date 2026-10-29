@@ -24,7 +24,8 @@
         k8s-apply-prod k8s-apply-dev k8s-diff-prod k8s-diff-dev \
         k8s-local-up k8s-local-down k8s-local-status k8s-local-hosts \
         k8s-local-garage-ui k8s-local-data-processing \
-        k8s-local-frontend-build
+        k8s-local-frontend-build \
+        grafana-cloud-render
 
 PYTHON ?= python3
 REGISTRY = ghcr.io/okfn-brasil
@@ -145,3 +146,10 @@ k8s-local-data-processing: ## Executa data-processing manualmente no cluster loc
 k8s-local-frontend-build: ## Builda e carrega a imagem do frontend no cluster kind local
 	docker build --network=host -t $(FRONTEND_IMAGE):local $(FRONTEND_DIR)
 	kind load docker-image $(FRONTEND_IMAGE):local --name querido-diario-dev
+
+# --- Grafana Cloud (monitoramento em produção) ---
+
+GRAFANA_CLOUD_CHART_VERSION ?= 4.5.3
+
+grafana-cloud-render: ## Regenera k8s/monitoring/grafana-cloud/manifests.yaml a partir do chart Helm (aplicado via k8s-apply-prod)
+	GRAFANA_CLOUD_CHART_VERSION=$(GRAFANA_CLOUD_CHART_VERSION) $(PYTHON) scripts/grafana_cloud_render.py

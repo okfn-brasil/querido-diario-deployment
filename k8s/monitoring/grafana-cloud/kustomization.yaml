@@ -1,0 +1,9 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# manifests.yaml é gerado por `make grafana-cloud-render` (helm template).
+# cluster-scoped.yaml (CRD, ClusterRoles, webhooks) NÃO entra aqui: o admin aplica
+# antes, com `kubectl apply -f`. Requer o Secret grafana-cloud-credentials (ver docs/grafana-cloud.md).
+resources:
+  - manifests.yaml
