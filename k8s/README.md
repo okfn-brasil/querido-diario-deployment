@@ -244,8 +244,11 @@ Já incluído no overlay de produção (`k8s/monitoring/grafana-cloud/`, chart
 `make k8s-apply-prod`. Requer o secret `grafana-cloud-credentials` (template em
 `overlays/production/grafana-cloud-credentials.example.yaml`). Para regenerar o
 YAML: `make grafana-cloud-render`. Os recursos de escopo de cluster ficam em
-`cluster-scoped.yaml` e precisam ser aplicados antes pelo admin. Detalhes em
-[`docs/grafana-cloud.md`](../docs/grafana-cloud.md).
+`cluster-scoped.yaml` e precisam ser aplicados antes pelo admin, que também deve
+liberar ao ServiceAccount de deploy acesso a `alloys.collectors.grafana.com` no
+namespace. O node-exporter fica desligado em produção. No 1º install há um
+deadlock com o webhook de ConfigMaps (`failurePolicy: Fail`) que exige ajuste
+temporário pelo admin. Detalhes em [`docs/grafana-cloud.md`](../docs/grafana-cloud.md).
 
 ## Referência rápida
 
