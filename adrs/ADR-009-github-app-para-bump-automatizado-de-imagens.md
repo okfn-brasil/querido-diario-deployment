@@ -74,13 +74,23 @@ disparam outros workflows. Um PR de bump aberto assim não rodaria `checks.yml`
 |---|---|---|
 | `querido-diario-frontend` | sha curto (publicado a cada push na `main`) | Sim — bump a cada merge na `main` |
 | `querido-diario-api` | tag de versão `vX.Y.Z` | Sim — bump disparado pela publicação da release/tag |
-| `querido-diario-backend` | hoje `latest` | Depois de passar a publicar e fixar tags imutáveis (pré-requisito) |
-| `querido-diario-data-processing` (+ Tika) | hoje `latest` | Idem |
+| `querido-diario-backend` | tag de versão `vX.Y.Z` (a produção hoje usa `latest`; passa a fixar a tag) | Sim — bump disparado pela publicação da tag |
+| `querido-diario-data-processing` (+ Tika) | tag de versão `vX.Y.Z` (a produção hoje usa `latest`; passa a fixar a tag) | Sim — bump disparado pela publicação da tag |
 | `querido-diario` (raspadores) | não é imagem do cluster (Zyte, ADR-005) | Não |
 
 Fixar tag imutável em produção já é a orientação do próprio overlay ("evite
-`:latest`"); trazer backend e data-processing para o fluxo é consequência
-natural de adotá-la, mas fica como trabalho posterior a esta decisão.
+`:latest`"). Backend e data-processing já publicam manifests multi-arch
+`vX.Y.Z` quando uma tag `v*` é enviada (além de `latest`), então não há
+pré-requisito de build: o fluxo os trata como a API, e a migração de `latest`
+para tag fixa no overlay de produção acontece no primeiro bump de cada um.
+
+Detalhes que valem para quem implementar:
+
+- No data-processing, a mesma tag `v*` também publica a imagem do Apache Tika
+  (workflow separado). O job de bump deve esperar as duas imagens existirem
+  antes de abrir o PR e atualizar `newTag` de ambas no mesmo PR.
+- As imagens são multi-arch: o job deve aguardar o manifest `vX.Y.Z` (não só as
+  tags por arquitetura) estar disponível no GHCR.
 
 ## Alternativas consideradas
 
@@ -121,5 +131,7 @@ natural de adotá-la, mas fica como trabalho posterior a esta decisão.
 2. Habilitar a proteção de branch descrita acima neste repositório.
 3. Implementar o job `bump-deployment` em `querido-diario-frontend` (primeiro
    caso, ao lado de `docker.yml`) e validar o fluxo de ponta a ponta.
-4. Replicar em `querido-diario-api`, usando a tag de release.
-5. Avaliar backend e data-processing após fixarem tags imutáveis.
+4. Replicar em `querido-diario-api`, `querido-diario-backend` e
+   `querido-diario-data-processing` (+ Tika), todos disparados pela tag `v*`.
+   No primeiro bump de backend e data-processing, o overlay de produção sai de
+   `latest` para a tag fixa.
