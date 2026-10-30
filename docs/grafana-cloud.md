@@ -85,11 +85,24 @@ Para mudar valores ou a versão do chart, edite `values.yaml` (ou
 `GRAFANA_CLOUD_CHART_VERSION` no Makefile), rode `make grafana-cloud-render` e
 commite `manifests.yaml` e `cluster-scoped.yaml` atualizados (o segundo precisa ser reaplicado pelo admin).
 
-Diferenças em relação ao `helm upgrade --install`: o release não existe no Helm
-(sem `helm uninstall`/rollback — remova com `kubectl delete -k`) e os Jobs de
+Diferenças em relação ao `helm upgrade --install`: o release do
+`k8s-monitoring` não existe no Helm (sem `helm uninstall`/rollback — remova com
+`kubectl delete -k`). O único release Helm no namespace é `grafana-cloud-alloy`
+(chart `alloy`), criado pelo próprio alloy-operator a partir da CR `Alloy`: o
+DaemonSet do Alloy pertence a essa CR, então altere-o por `manifests.yaml` e não
+com `kubectl edit`. Os Jobs de
 hook (add-finalizer / remove-alloy-and-finalizer) são descartados. Para
 desinstalar, apague a CR `Alloy` antes do Deployment do operador (o admin remove
 os recursos de `cluster-scoped.yaml`).
+
+## Nome do cluster
+
+O cluster se chama **`revoada-qd`** no Grafana Cloud (`cluster.name` do
+`values.yaml`): vira o atributo `cluster` do coletor no Fleet Management, a
+variável `CLUSTER_NAME` do Alloy e parte do `id` de cada coletor
+(`grafana-cloud-revoada-qd-querido-diario-alloy-<nó>`). Ao escrever *matchers* de
+pipelines no Fleet Management, use esse valor exato (ex.: `cluster!="revoada-qd"`
+ou `cluster!~"revoada.*"`); `revoada` sozinho não casa.
 
 ## O que é implantado
 
