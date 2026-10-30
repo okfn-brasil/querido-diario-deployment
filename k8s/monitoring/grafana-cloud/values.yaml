@@ -59,10 +59,11 @@ telemetryServices:
     metricDenylist:
       - kube_pod_init_container_.*
 
+  # Desligado: sem agentes Beyla (eBPF) nem pipeline que use o cache de
+  # metadados do Kubernetes, ele só ocupava um pod. Reative junto com um
+  # pipeline de Application Observability, se um dia for necessário.
   beyla:
-    deploy: true
-    k8sCache:
-      replicas: 1
+    deploy: false
 
   opencost:
     deploy: false

@@ -111,27 +111,6 @@ rules:
     resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "bind", "escalate"]
 ---
-# Source: k8s-monitoring/charts/telemetryServices/charts/beyla/templates/cluster-role.yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: grafana-cloud-beyla-cache
-  labels:
-    helm.sh/chart: beyla-1.16.11
-    app.kubernetes.io/name: beyla-cache
-    app.kubernetes.io/instance: grafana-cloud
-    app.kubernetes.io/version: "3.32.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/part-of: beyla
-    app.kubernetes.io/component: rbac
-rules:
-  - apiGroups: [ "apps" ]
-    resources: [ "replicasets" ]
-    verbs: [ "list", "watch" ]
-  - apiGroups: [ "" ]
-    resources: [ "pods", "services", "nodes" ]
-    verbs: [ "list", "watch", "get" ]
----
 # Source: k8s-monitoring/charts/telemetryServices/charts/kube-state-metrics/templates/role.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -391,28 +370,6 @@ subjects:
   - kind: ServiceAccount
     name: grafana-cloud-alloy-operator
     namespace: querido-diario
----
-# Source: k8s-monitoring/charts/telemetryServices/charts/beyla/templates/cluster-role-binding.yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: grafana-cloud-beyla-cache
-  labels:
-    helm.sh/chart: beyla-1.16.11
-    app.kubernetes.io/name: beyla-cache
-    app.kubernetes.io/instance: grafana-cloud
-    app.kubernetes.io/version: "3.32.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/part-of: beyla
-    app.kubernetes.io/component: rbac
-subjects:
-  - kind: ServiceAccount
-    name: grafana-cloud-beyla-cache
-    namespace: querido-diario
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: grafana-cloud-beyla-cache
 ---
 # Source: k8s-monitoring/charts/telemetryServices/charts/kube-state-metrics/templates/clusterrolebinding.yaml
 apiVersion: rbac.authorization.k8s.io/v1

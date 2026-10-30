@@ -16,22 +16,6 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 automountServiceAccountToken: true
 ---
-# Source: k8s-monitoring/charts/telemetryServices/charts/beyla/templates/serviceaccount.yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: grafana-cloud-beyla-cache
-  namespace: querido-diario
-  labels:
-    helm.sh/chart: beyla-1.16.11
-    app.kubernetes.io/name: beyla-cache
-    app.kubernetes.io/instance: grafana-cloud
-    app.kubernetes.io/version: "3.32.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/part-of: beyla
-    app.kubernetes.io/component: rbac
-automountServiceAccountToken: true
----
 # Source: k8s-monitoring/charts/telemetryServices/charts/kube-state-metrics/templates/serviceaccount.yaml
 apiVersion: v1
 kind: ServiceAccount
@@ -461,29 +445,6 @@ spec:
     app.kubernetes.io/name: alloy-operator
     app.kubernetes.io/instance: grafana-cloud
 ---
-# Source: k8s-monitoring/charts/telemetryServices/charts/beyla/templates/cache-service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: beyla-k8s-cache
-  namespace: querido-diario
-  labels:
-    helm.sh/chart: beyla-1.16.11
-    app.kubernetes.io/name: beyla-k8s-cache
-    app.kubernetes.io/instance: grafana-cloud
-    app.kubernetes.io/version: "3.32.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/part-of: beyla
-    app.kubernetes.io/component: networking
-spec:
-  ports:
-    - port: 50055
-      protocol: TCP
-      targetPort: grpc
-      name: grpc
-  selector:
-    app.kubernetes.io/name: beyla-k8s-cache
----
 # Source: k8s-monitoring/charts/telemetryServices/charts/kube-state-metrics/templates/service.yaml
 apiVersion: v1
 kind: Service
@@ -638,48 +599,6 @@ spec:
             readOnlyRootFilesystem: true
       nodeSelector:
         kubernetes.io/os: linux
----
-# Source: k8s-monitoring/charts/telemetryServices/charts/beyla/templates/cache-deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: beyla-k8s-cache
-  namespace: querido-diario
-  labels:
-    helm.sh/chart: beyla-1.16.11
-    app.kubernetes.io/name: beyla-k8s-cache
-    app.kubernetes.io/instance: grafana-cloud
-    app.kubernetes.io/version: "3.32.0"
-    app.kubernetes.io/managed-by: Helm
-    app.kubernetes.io/part-of: beyla
-    app.kubernetes.io/component: workload
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: beyla-k8s-cache
-  template:
-    metadata:
-      labels:
-        helm.sh/chart: beyla-1.16.11
-        app.kubernetes.io/name: beyla-k8s-cache
-        app.kubernetes.io/instance: grafana-cloud
-        app.kubernetes.io/version: "3.32.0"
-        app.kubernetes.io/managed-by: Helm
-        app.kubernetes.io/part-of: beyla
-    spec:
-      serviceAccountName: grafana-cloud-beyla-cache
-      containers:
-        - name: beyla-cache
-          image: docker.io/grafana/beyla-k8s-cache:3.32.0
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 50055
-              protocol: TCP
-              name: grpc
-          env:
-            - name: BEYLA_K8S_CACHE_PORT
-              value: "50055"
 ---
 # Source: k8s-monitoring/charts/telemetryServices/charts/kube-state-metrics/templates/deployment.yaml
 apiVersion: apps/v1
