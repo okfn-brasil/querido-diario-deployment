@@ -51,6 +51,13 @@ telemetryServices:
 
   kube-state-metrics:
     deploy: true
+    # Reduz séries ativas (o tenant do Grafana Cloud tem limite de 15.000): só o
+    # nosso namespace, em vez de ceph-cluster, rook-ceph, openstack etc. Os
+    # recursos de escopo de cluster (nodes, namespaces...) continuam cobertos.
+    namespaces: querido-diario
+    # Métricas de init containers não são usadas nos dashboards.
+    metricDenylist:
+      - kube_pod_init_container_.*
 
   beyla:
     deploy: true
