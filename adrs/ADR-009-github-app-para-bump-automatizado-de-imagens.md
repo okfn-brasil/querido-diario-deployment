@@ -55,8 +55,8 @@ disparam outros workflows. Um PR de bump aberto assim não rodaria `checks.yml`
   `Metadata: read`. Nada além disso — em particular, sem `Workflows`, `Secrets`
   ou `Administration`.
 - **Instalação:** somente em `querido-diario-deployment`.
-- **Credenciais:** `APP_ID` e a chave privada guardadas como secrets **da
-  organização**, com visibilidade restrita aos repositórios de serviço
+- **Credenciais:** `QD_APP_ID` e `QD_APP_PRIVATE_KEY` guardados como secrets
+  **da organização**, com visibilidade restrita aos repositórios de serviço
   participantes. Os workflows geram o token com
   [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token)
   (fixado por SHA, como as demais actions), com `owner` e `repositories`
@@ -126,8 +126,11 @@ Detalhes que valem para quem implementar:
 
 ## Próximos passos
 
-1. Um administrador da org cria o App e os secrets de org (`APP_ID`,
-   chave privada), restritos aos repositórios participantes.
+1. ~~Um administrador da org cria o App e os secrets de org (`QD_APP_ID`,
+   `QD_APP_PRIVATE_KEY`), restritos aos repositórios participantes.~~ Feito em
+   2026-10-30: App criado e instalado só neste repositório; secrets da org
+   criados (confirmar que `querido-diario-frontend` está na lista de
+   repositórios com acesso).
 2. Habilitar a proteção de branch descrita acima neste repositório.
 3. Implementar o job `bump-deployment` em `querido-diario-frontend` (primeiro
    caso, ao lado de `docker.yml`) e validar o fluxo de ponta a ponta.
