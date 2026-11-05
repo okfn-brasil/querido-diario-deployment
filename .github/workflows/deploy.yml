@@ -182,9 +182,11 @@ jobs:
             fi
           fi
 
-      # ── Grafana Cloud (release Helm) ───────────────────────────────────────
+      # ── Grafana Cloud (helm template | kubectl apply, sem release Helm) ────
+      # O Helm só renderiza o chart (um `helm install` rodaria `lookup` de
+      # Nodes, proibido para este ServiceAccount; ver ADR-009).
       # O Secret grafana-cloud-credentials é criado manualmente e NUNCA é
-      # tocado por este workflow; o install falha se ele não existir.
+      # tocado por este workflow; o passo de aplicar falha se ele não existir.
 
       - name: Instala Helm
         uses: azure/setup-helm@v4
@@ -194,7 +196,7 @@ jobs:
       - name: Diff Grafana Cloud
         run: python3 scripts/grafana_cloud.py diff || true
 
-      - name: Instala/atualiza Grafana Cloud
+      - name: Aplica Grafana Cloud (helm template | kubectl apply)
         run: python3 scripts/grafana_cloud.py install
 
       - name: Aguarda rollout

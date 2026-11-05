@@ -1,5 +1,13 @@
 # Design — Grafana Cloud via Helm (release real) + monitoramento local
 
+> **Revisão (2026-11-05):** a opção de release Helm (`helm upgrade --install`)
+> descrita abaixo foi **superada** pela opção B: `helm template | kubectl apply`
+> (ver [ADR-009](../../../adrs/ADR-009-grafana-cloud-helm-template.md)). Causa: o
+> `helm install` executa `lookup` (o chart 4.5.3 lista todos os Nodes e lê um
+> Namespace) e o ServiceAccount de deploy só tem permissão no namespace
+> (`nodes is forbidden`). O texto abaixo é o desenho original, mantido como
+> histórico; não há release Helm, `helm rollback` nem `--atomic`.
+
 Data: 2026-11-04 · Status: rascunho para aprovação
 
 ## Intenção e porquê

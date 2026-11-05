@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""grafana_cloud.py — Release Helm do Grafana Cloud (chart grafana/k8s-monitoring).
+"""grafana_cloud.py — Grafana Cloud (chart grafana/k8s-monitoring) via `helm template | kubectl apply`.
+
+Não existe release Helm: o chart é só renderizado e os manifestos são aplicados
+(o `helm install` roda `lookup` de Nodes/Namespace, que a ServiceAccount de
+deploy, restrita ao namespace, não pode fazer; ver ADR-009).
 
 Subcomandos:
   check    renderiza o chart e falha se algum recurso exigir escopo de cluster
            (a ServiceAccount de deploy não pode criá-los).
   render   imprime o YAML renderizado (`helm template --include-crds`).
   diff     `helm template | kubectl diff` (exit 1 do kubectl = há diferenças, não é erro).
-  install  `helm upgrade --install --atomic` (exige o secret grafana-cloud-credentials).
-  status   `helm status` + `helm list`.
-  rollback `helm rollback` para a revisão anterior.
+  install  check + secret grafana-cloud-credentials + `helm template | kubectl apply`
+           (sem prune: objetos que o chart deixar de renderizar não são removidos).
+  status   `kubectl get` dos objetos do deploy (linhas com `grafana-cloud`).
 """
 from __future__ import annotations
 
@@ -98,14 +102,6 @@ def _captured(cmd: list[str]) -> subprocess.CompletedProcess:
         raise HelmError(f"falhou: {' '.join(cmd[:3])} (exit {e.returncode})\n{e.stderr or ''}".rstrip()) from e
 
 
-def _run_passthrough(cmd: list[str]) -> int:
-    """Roda o comando com saída direta ao terminal; binário ausente vira HelmError."""
-    try:
-        return subprocess.run(cmd).returncode
-    except FileNotFoundError as e:
-        raise HelmError(f"comando não encontrado: {cmd[0]} ({e})") from e
-
-
 def _template_args(chart_version: str, values: Path) -> list[str]:
     return [
         "helm", "template", RELEASE, CHART, "--version", chart_version,
@@ -113,22 +109,11 @@ def _template_args(chart_version: str, values: Path) -> list[str]:
     ]
 
 
-def helm_args(action: str, chart_version: str, values: Path) -> list[str]:
-    if action == "install":
-        return [
-            "helm", "upgrade", "--install", RELEASE, CHART, "--version", chart_version,
-            "-n", NAMESPACE, "-f", str(values), "--atomic", "--timeout", "10m",
-        ]
-    if action == "diff":
-        return _template_args(chart_version, values)
-    raise ValueError(f"ação desconhecida: {action}")
-
-
 def render(chart_version: str, values: Path) -> str:
     # stdout reservado ao YAML (render é usado em pipe): a saída do helm repo é descartada.
     _captured(["helm", "repo", "add", "grafana", "https://grafana.github.io/helm-charts"])
     _captured(["helm", "repo", "update", "grafana"])
-    return _captured(helm_args("diff", chart_version, values)).stdout
+    return _captured(_template_args(chart_version, values)).stdout
 
 
 def credentials_secret_exists() -> bool:
@@ -138,7 +123,7 @@ def credentials_secret_exists() -> bool:
 def check() -> int:
     found = cluster_scoped_resources(render(CHART_VERSION, VALUES))
     if found:
-        print("[erro]  o release exigiria escopo de cluster:", file=sys.stderr)
+        print("[erro]  o deploy exigiria escopo de cluster:", file=sys.stderr)
         for r in found:
             print(f"  {r}", file=sys.stderr)
         return 1
@@ -146,14 +131,19 @@ def check() -> int:
     return 0
 
 
+def _kubectl_with_stdin(args: list[str], manifest: str) -> int:
+    """Roda kubectl com o manifesto no stdin; binário ausente vira HelmError."""
+    try:
+        return subprocess.run(["kubectl", *args], input=manifest, text=True).returncode
+    except FileNotFoundError as e:
+        raise HelmError(f"comando não encontrado: kubectl ({e})") from e
+
+
 def diff() -> int:
     manifest = render(CHART_VERSION, VALUES)
     # kubectl diff: 0 = sem diferenças, 1 = há diferenças (não é falha), >1 = erro.
-    try:
-        res = subprocess.run(["kubectl", "diff", "-n", NAMESPACE, "-f", "-"], input=manifest, text=True)
-    except FileNotFoundError as e:
-        raise HelmError(f"comando não encontrado: kubectl ({e})") from e
-    return 0 if res.returncode in (0, 1) else res.returncode
+    rc = _kubectl_with_stdin(["diff", "-n", NAMESPACE, "-f", "-"], manifest)
+    return 0 if rc in (0, 1) else rc
 
 
 def install() -> int:
@@ -170,20 +160,19 @@ def install() -> int:
         )
         pc.err(f"secret {SECRET} não existe no namespace {NAMESPACE}")  # sai com 1
         return 1
-    return _run_passthrough(helm_args("install", CHART_VERSION, VALUES))
+    return _kubectl_with_stdin(["apply", "-n", NAMESPACE, "-f", "-"], render(CHART_VERSION, VALUES))
 
 
 def status() -> int:
-    rc = _run_passthrough(["helm", "status", RELEASE, "-n", NAMESPACE])
-    rc2 = _run_passthrough(["helm", "list", "-n", NAMESPACE])
-    return rc or rc2
+    out = _captured(["kubectl", "get", "alloy,daemonset,deployment,service,pod", "-n", NAMESPACE]).stdout
+    lines = out.splitlines()
+    for i, line in enumerate(lines):
+        if i == 0 or "grafana-cloud" in line:
+            print(line)
+    return 0
 
 
-def rollback() -> int:
-    return _run_passthrough(["helm", "rollback", RELEASE, "0", "-n", NAMESPACE])
-
-
-COMMANDS = {"check": check, "diff": diff, "install": install, "status": status, "rollback": rollback}
+COMMANDS = {"check": check, "diff": diff, "install": install, "status": status}
 
 
 def main(argv: list[str]) -> int:
@@ -197,7 +186,7 @@ def main(argv: list[str]) -> int:
     except HelmError as e:
         print(f"[erro]  {e}", file=sys.stderr)
         return 1
-    print("uso: grafana_cloud.py {check|render|diff|install|status|rollback}", file=sys.stderr)
+    print("uso: grafana_cloud.py {check|render|diff|install|status}", file=sys.stderr)
     return 2
 
 

@@ -239,16 +239,18 @@ make k8s-apply-prod
 
 ### 5. Monitoramento (Grafana Cloud)
 
-Não faz parte do overlay de produção: é um **release Helm** (`grafana-cloud`,
-chart `grafana/k8s-monitoring`, valores em `k8s/monitoring/grafana-cloud/values.yaml`)
-instalado pelo CI (`deploy.yml`) ou por `make grafana-cloud-install`. Outros
-alvos: `make grafana-cloud-check|diff|status|rollback`. Requer o secret
+Não faz parte do overlay de produção: o chart `grafana/k8s-monitoring` (versão
+fixada, valores em `k8s/monitoring/grafana-cloud/values.yaml`) é renderizado por
+`helm template` e aplicado com `kubectl apply` pelo CI (`deploy.yml`) ou por
+`make grafana-cloud-install`. **Não há release Helm** (ver ADR-009). Outros
+alvos: `make grafana-cloud-check|diff|status`. Rollback: reverter o commit e
+redeployar. Requer o secret
 `grafana-cloud-credentials` (criado à mão; template em
-`overlays/production/grafana-cloud-credentials.example.yaml`). O release não
+`overlays/production/grafana-cloud-credentials.example.yaml`). O deploy não
 cria recursos de escopo de cluster: CRD e ClusterRoles do operator e do
 kube-state-metrics ficam com o admin. Para testar localmente:
-`make k8s-local-monitoring-up`. Detalhes, e-mail ao admin e procedimento de
-cutover em [`docs/grafana-cloud.md`](../docs/grafana-cloud.md).
+`make k8s-local-monitoring-up`. Detalhes em
+[`docs/grafana-cloud.md`](../docs/grafana-cloud.md).
 
 ## Referência rápida
 

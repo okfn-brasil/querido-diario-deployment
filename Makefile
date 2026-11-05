@@ -28,7 +28,7 @@
         k8s-local-monitoring-up k8s-local-monitoring-down \
         k8s-local-monitoring-status k8s-local-monitoring-grafana \
         grafana-cloud-check grafana-cloud-diff grafana-cloud-install \
-        grafana-cloud-status grafana-cloud-rollback
+        grafana-cloud-status
 
 PYTHON ?= python3
 REGISTRY = ghcr.io/okfn-brasil
@@ -168,17 +168,14 @@ k8s-local-monitoring-grafana: ## Abre port-forward do Grafana local (http://loca
 GRAFANA_CLOUD_CHART_VERSION ?= 4.5.3
 export GRAFANA_CLOUD_CHART_VERSION
 
-grafana-cloud-check: ## Valida que o release Helm do Grafana Cloud não exige escopo de cluster
+grafana-cloud-check: ## Valida que o Grafana Cloud (chart renderizado) não exige escopo de cluster
 	$(PYTHON) scripts/grafana_cloud.py check
 
-grafana-cloud-diff: ## Mostra o que o release Helm do Grafana Cloud mudaria no cluster (helm template | kubectl diff)
+grafana-cloud-diff: ## Mostra o que o Grafana Cloud mudaria no cluster (helm template | kubectl diff)
 	$(PYTHON) scripts/grafana_cloud.py diff
 
-grafana-cloud-install: ## Instala/atualiza o release Helm do Grafana Cloud (--atomic; exige o secret grafana-cloud-credentials)
+grafana-cloud-install: ## Aplica o Grafana Cloud (helm template | kubectl apply, sem release Helm; exige o secret grafana-cloud-credentials)
 	$(PYTHON) scripts/grafana_cloud.py install
 
-grafana-cloud-status: ## Mostra o status do release Helm do Grafana Cloud
+grafana-cloud-status: ## Mostra os objetos do Grafana Cloud no namespace (kubectl get)
 	$(PYTHON) scripts/grafana_cloud.py status
-
-grafana-cloud-rollback: ## Reverte o release Helm do Grafana Cloud para a revisão anterior
-	$(PYTHON) scripts/grafana_cloud.py rollback

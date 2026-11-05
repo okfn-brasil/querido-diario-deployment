@@ -56,6 +56,7 @@ Todas em `adrs/`. Leia antes de propor mudanças estruturais:
 | ADR-006 | Garage como storage S3-compatível em desenvolvimento local |
 | ADR-007 | Terminação SSL: cert-manager + Let's Encrypt (não `tls.certResolver` do Traefik) |
 | ADR-008 | OpenSearch single-node dentro do cluster k8s em produção (StatefulSet, sem HA) |
+| ADR-009 | Grafana Cloud via `helm template \| kubectl apply` (sem release Helm; ServiceAccount só com permissão no namespace) |
 
 ---
 
@@ -80,7 +81,7 @@ k8s/
 │   ├── traefik-values.yaml
 │   └── monitoring/          # Prometheus/Loki/Grafana/Alloy locais (values + dashboards)
 ├── monitoring/
-│   └── grafana-cloud/values.yaml  # Valores do release Helm do Grafana Cloud (prod)
+│   └── grafana-cloud/values.yaml  # Valores do chart do Grafana Cloud (prod; helm template)
 adrs/                        # Architecture Decision Records
 docs/                        # Documentação técnica complementar
 scripts/                     # Automação (Python, multiplataforma — ver Makefile)
@@ -88,7 +89,7 @@ scripts/                     # Automação (Python, multiplataforma — ver Make
 │   ├── k8s_local_up.py      # Idempotente: kind + Traefik + CNPG + overlay dev
 │   ├── k8s_local_down.py
 │   ├── k8s_local_monitoring.py  # Monitoramento local (kind), alvo separado
-│   ├── grafana_cloud.py     # Release Helm do Grafana Cloud (check/diff/install/status/rollback)
+│   ├── grafana_cloud.py     # Grafana Cloud: helm template | kubectl apply (check/render/diff/install/status)
 │   └── ...
 ```
 
@@ -161,22 +162,22 @@ make k8s-diff-prod    # ver o que será aplicado antes de aplicar
 make k8s-apply-prod   # aplicar no cluster (requer kubeconfig configurado)
 ```
 
-### Grafana Cloud (release Helm, não Kustomize)
+### Grafana Cloud (helm template + kubectl apply, não Kustomize)
 
-O Grafana Cloud em produção é o release Helm `grafana-cloud` (chart
-`grafana/k8s-monitoring`, valores em `k8s/monitoring/grafana-cloud/values.yaml`),
-instalado pelo CI no deploy ou manualmente:
+O Grafana Cloud em produção é o chart `grafana/k8s-monitoring` (versão fixada,
+valores em `k8s/monitoring/grafana-cloud/values.yaml`), renderizado por
+`helm template` e aplicado com `kubectl apply` (sem release Helm; ADR-009),
+pelo CI no deploy ou manualmente:
 
 ```bash
-make grafana-cloud-check     # garante que o release não exige escopo de cluster
+make grafana-cloud-check     # garante que o chart renderizado não exige escopo de cluster
 make grafana-cloud-diff      # o que mudaria
-make grafana-cloud-install   # helm upgrade --install --atomic (exige o secret grafana-cloud-credentials)
-make grafana-cloud-status
-make grafana-cloud-rollback
+make grafana-cloud-install   # helm template | kubectl apply (exige o secret grafana-cloud-credentials)
+make grafana-cloud-status    # objetos grafana-cloud no namespace (não há helm status)
 ```
 
 CRD e ClusterRoles (operator, kube-state-metrics) ficam com o admin do cluster.
-Detalhes e cutover em `docs/grafana-cloud.md`.
+Rollback = reverter o commit e redeployar. Detalhes em `docs/grafana-cloud.md`.
 
 ### Secrets de produção (criar manualmente, nunca versionar)
 

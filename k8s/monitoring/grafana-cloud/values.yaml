@@ -60,7 +60,7 @@ telemetryServices:
       - kube_pod_init_container_.*
     # O deploy não cria recursos de escopo de cluster. O ClusterRole/Binding
     # `grafana-cloud-kube-state-metrics` já existe (criado pelo admin) e o
-    # ServiceAccount de mesmo nome continua sendo criado pelo release.
+    # ServiceAccount de mesmo nome continua sendo criado pelo chart.
     rbac:
       create: false
 
@@ -78,6 +78,6 @@ telemetryServices:
     deploy: false
 
 # O alloy-operator (Deployment, CRD e ClusterRoles) já existe no cluster,
-# instalado pelo admin; o release não o gerencia (exigiria escopo de cluster).
+# instalado pelo admin; o chart não o gerencia (exigiria escopo de cluster).
 alloy-operator:
   deploy: false

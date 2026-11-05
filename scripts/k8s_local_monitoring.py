@@ -33,7 +33,7 @@ MONITORING_NAMESPACE = "monitoring"
 PROMETHEUS_VERSION = "29.40.3"   # prometheus-community/prometheus
 LOKI_VERSION = "7.5.0"           # grafana/loki
 GRAFANA_VERSION = "10.5.15"      # grafana/grafana
-# Mesma variável do Makefile (e do release de produção); fallback p/ uso direto.
+# Mesma variável do Makefile (e do deploy de produção); fallback p/ uso direto.
 K8S_MONITORING_VERSION = os.environ.get("GRAFANA_CLOUD_CHART_VERSION") or "4.5.3"
 
 MIN_MEMORY_GIB = 4.0
