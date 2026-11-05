@@ -1,0 +1,17 @@
+# prometheus-community/prometheus para o kind local (monitoramento).
+alertmanager:
+  enabled: false
+prometheus-pushgateway:
+  enabled: false
+kube-state-metrics:
+  enabled: false   # já vem do chart k8s-monitoring
+prometheus-node-exporter:
+  enabled: false   # já vem do chart k8s-monitoring
+server:
+  # O Alloy envia as métricas por remote write.
+  extraFlags:
+    - web.enable-lifecycle
+    - web.enable-remote-write-receiver
+  persistentVolume:
+    enabled: false
+  retention: 24h

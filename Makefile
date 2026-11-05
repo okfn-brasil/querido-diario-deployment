@@ -25,6 +25,8 @@
         k8s-local-up k8s-local-down k8s-local-status k8s-local-hosts \
         k8s-local-garage-ui k8s-local-data-processing \
         k8s-local-frontend-build \
+        k8s-local-monitoring-up k8s-local-monitoring-down \
+        k8s-local-monitoring-status k8s-local-monitoring-grafana \
         grafana-cloud-check grafana-cloud-diff grafana-cloud-install \
         grafana-cloud-status grafana-cloud-rollback
 
@@ -147,6 +149,18 @@ k8s-local-data-processing: ## Executa data-processing manualmente no cluster loc
 k8s-local-frontend-build: ## Builda e carrega a imagem do frontend no cluster kind local
 	docker build --network=host -t $(FRONTEND_IMAGE):local $(FRONTEND_DIR)
 	kind load docker-image $(FRONTEND_IMAGE):local --name querido-diario-dev
+
+k8s-local-monitoring-up: ## Sobe Prometheus, Loki, Grafana e Alloy no kind local (namespace monitoring; ~2 GiB extras)
+	$(PYTHON) scripts/k8s_local_monitoring.py up
+
+k8s-local-monitoring-down: ## Remove o monitoramento local (releases e namespace monitoring)
+	$(PYTHON) scripts/k8s_local_monitoring.py down
+
+k8s-local-monitoring-status: ## Status dos pods e releases do monitoramento local
+	$(PYTHON) scripts/k8s_local_monitoring.py status
+
+k8s-local-monitoring-grafana: ## Abre port-forward do Grafana local (http://localhost:3000, admin/admin)
+	$(PYTHON) scripts/k8s_local_monitoring.py grafana
 
 # --- Grafana Cloud (monitoramento em produção) ---
 

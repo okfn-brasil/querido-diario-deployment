@@ -18,6 +18,10 @@ SECTIONS = [
         ("make k8s-local-hosts", "adiciona entradas ao hosts file"),
         ("make k8s-local-garage-ui", "port-forward Garage UI -> localhost:3909"),
         ("make k8s-local-data-processing", "executa data-processing manualmente"),
+        ("make k8s-local-monitoring-up", "sobe Prometheus/Loki/Grafana/Alloy (namespace monitoring)"),
+        ("make k8s-local-monitoring-grafana", "port-forward Grafana -> localhost:3000 (admin/admin)"),
+        ("make k8s-local-monitoring-status", "status do monitoramento local"),
+        ("make k8s-local-monitoring-down", "remove o monitoramento local"),
     ]),
     ("Kubernetes (kustomize)", [
         ("make k8s-build-dev", "dry-run overlay dev"),
