@@ -8,6 +8,10 @@ on:
 env:
   NAMESPACE: querido-diario
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   check-secret-refs:
     runs-on: ubuntu-latest
@@ -177,6 +181,21 @@ jobs:
               exit 1
             fi
           fi
+
+      # ── Grafana Cloud (release Helm) ───────────────────────────────────────
+      # O Secret grafana-cloud-credentials é criado manualmente e NUNCA é
+      # tocado por este workflow; o install falha se ele não existir.
+
+      - name: Instala Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.20.2
+
+      - name: Diff Grafana Cloud
+        run: python3 scripts/grafana_cloud.py diff || true
+
+      - name: Instala/atualiza Grafana Cloud
+        run: python3 scripts/grafana_cloud.py install
 
       - name: Aguarda rollout
         run: |

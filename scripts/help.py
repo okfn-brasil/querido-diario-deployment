@@ -18,6 +18,17 @@ SECTIONS = [
         ("make k8s-local-hosts", "adiciona entradas ao hosts file"),
         ("make k8s-local-garage-ui", "port-forward Garage UI -> localhost:3909"),
         ("make k8s-local-data-processing", "executa data-processing manualmente"),
+        ("make k8s-local-monitoring-up", "sobe Prometheus/Loki/Grafana/Alloy (namespace monitoring)"),
+        ("make k8s-local-monitoring-grafana", "port-forward Grafana -> localhost:3000 (admin/admin)"),
+        ("make k8s-local-monitoring-status", "status do monitoramento local"),
+        ("make k8s-local-monitoring-down", "remove o monitoramento local"),
+    ]),
+    ("Grafana Cloud (produção)", [
+        ("make grafana-cloud-check", "valida que o release Helm não exige escopo de cluster"),
+        ("make grafana-cloud-diff", "mostra o que o release mudaria no cluster"),
+        ("make grafana-cloud-install", "helm upgrade --install --atomic (exige o secret grafana-cloud-credentials)"),
+        ("make grafana-cloud-status", "status do release Helm"),
+        ("make grafana-cloud-rollback", "reverte para a revisão anterior"),
     ]),
     ("Kubernetes (kustomize)", [
         ("make k8s-build-dev", "dry-run overlay dev"),

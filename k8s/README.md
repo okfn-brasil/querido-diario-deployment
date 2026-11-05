@@ -239,16 +239,16 @@ make k8s-apply-prod
 
 ### 5. Monitoramento (Grafana Cloud)
 
-Já incluído no overlay de produção (`k8s/monitoring/grafana-cloud/`, chart
-`grafana/k8s-monitoring` renderizado em YAML estático) e aplicado pelo
-`make k8s-apply-prod`. Requer o secret `grafana-cloud-credentials` (template em
-`overlays/production/grafana-cloud-credentials.example.yaml`). Para regenerar o
-YAML: `make grafana-cloud-render`. Os recursos de escopo de cluster ficam em
-`cluster-scoped.yaml` e precisam ser aplicados antes pelo admin, que também deve
-liberar ao ServiceAccount de deploy acesso a `alloys.collectors.grafana.com` no
-namespace. O node-exporter fica desligado em produção. No 1º install há um
-deadlock com o webhook de ConfigMaps (`failurePolicy: Fail`) que exige ajuste
-temporário pelo admin. Detalhes em [`docs/grafana-cloud.md`](../docs/grafana-cloud.md).
+Não faz parte do overlay de produção: é um **release Helm** (`grafana-cloud`,
+chart `grafana/k8s-monitoring`, valores em `k8s/monitoring/grafana-cloud/values.yaml`)
+instalado pelo CI (`deploy.yml`) ou por `make grafana-cloud-install`. Outros
+alvos: `make grafana-cloud-check|diff|status|rollback`. Requer o secret
+`grafana-cloud-credentials` (criado à mão; template em
+`overlays/production/grafana-cloud-credentials.example.yaml`). O release não
+cria recursos de escopo de cluster: CRD e ClusterRoles do operator e do
+kube-state-metrics ficam com o admin. Para testar localmente:
+`make k8s-local-monitoring-up`. Detalhes, e-mail ao admin e procedimento de
+cutover em [`docs/grafana-cloud.md`](../docs/grafana-cloud.md).
 
 ## Referência rápida
 

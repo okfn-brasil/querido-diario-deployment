@@ -1,0 +1,50 @@
+# Valores do chart grafana/k8s-monitoring para o kind local.
+# Instalado por `make k8s-local-monitoring-up` (scripts/k8s_local_monitoring.py).
+#
+# Diferente de produção: SEM Fleet Management (sem remoteConfig) — o chart
+# gera a configuração do Alloy a partir destes valores, e os destinos são o
+# Prometheus e o Loki do próprio namespace `monitoring`.
+
+cluster:
+  name: local
+
+destinations:
+  prometheus:
+    type: prometheus
+    url: http://prometheus-server.monitoring.svc.cluster.local/api/v1/write
+  loki:
+    type: loki
+    url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+
+# Coletores Alloy com a configuração gerada pelo chart (sem Fleet Management).
+collectors:
+  alloy-metrics:
+    presets: [clustered, statefulset, small]
+  alloy-logs:
+    presets: [filesystem-log-reader, daemonset, small]
+
+clusterMetrics:
+  enabled: true
+  collector: alloy-metrics
+
+podLogsViaLoki:
+  enabled: true
+  collector: alloy-logs
+  namespaces:
+    - querido-diario
+
+telemetryServices:
+  node-exporter:
+    deploy: true
+  kube-state-metrics:
+    deploy: true
+  beyla:
+    deploy: false
+  opencost:
+    deploy: false
+  sdkInjector:
+    deploy: false
+
+# No kind o escopo de cluster é permitido; o alloy-operator fica habilitado.
+alloy-operator:
+  deploy: true

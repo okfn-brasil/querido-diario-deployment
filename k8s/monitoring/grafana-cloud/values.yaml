@@ -58,6 +58,11 @@ telemetryServices:
     # Métricas de init containers não são usadas nos dashboards.
     metricDenylist:
       - kube_pod_init_container_.*
+    # O deploy não cria recursos de escopo de cluster. O ClusterRole/Binding
+    # `grafana-cloud-kube-state-metrics` já existe (criado pelo admin) e o
+    # ServiceAccount de mesmo nome continua sendo criado pelo release.
+    rbac:
+      create: false
 
   # Desligado: sem agentes Beyla (eBPF) nem pipeline que use o cache de
   # metadados do Kubernetes, ele só ocupava um pod. Reative junto com um
@@ -68,6 +73,11 @@ telemetryServices:
   opencost:
     deploy: false
 
+  # Desligado: exige CRDs/webhooks/ClusterRoles de escopo de cluster.
   sdkInjector:
-    deploy: true
-    allowedConfigMapWriters: system:serviceaccount:querido-diario:grafana-cloud-alloy
+    deploy: false
+
+# O alloy-operator (Deployment, CRD e ClusterRoles) já existe no cluster,
+# instalado pelo admin; o release não o gerencia (exigiria escopo de cluster).
+alloy-operator:
+  deploy: false

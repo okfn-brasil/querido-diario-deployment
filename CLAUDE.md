@@ -77,13 +77,18 @@ k8s/
 │   ├── production/          # Prod: réplicas, limites maiores, imagens fixas
 │   └── production-local/    # GITIGNORED — valores reais (endpoint S3, ClusterIssuer)
 ├── local/
-│   └── traefik-values.yaml
+│   ├── traefik-values.yaml
+│   └── monitoring/          # Prometheus/Loki/Grafana/Alloy locais (values + dashboards)
+├── monitoring/
+│   └── grafana-cloud/values.yaml  # Valores do release Helm do Grafana Cloud (prod)
 adrs/                        # Architecture Decision Records
 docs/                        # Documentação técnica complementar
 scripts/                     # Automação (Python, multiplataforma — ver Makefile)
 │   ├── pycommon.py          # Helpers compartilhados (log, download, ensure_kubectl/kind/helm...)
 │   ├── k8s_local_up.py      # Idempotente: kind + Traefik + CNPG + overlay dev
 │   ├── k8s_local_down.py
+│   ├── k8s_local_monitoring.py  # Monitoramento local (kind), alvo separado
+│   ├── grafana_cloud.py     # Release Helm do Grafana Cloud (check/diff/install/status/rollback)
 │   └── ...
 ```
 
@@ -126,6 +131,15 @@ make k8s-local-data-processing  # executa data-processing manualmente (CronJob s
 make k8s-local-down             # destroi o cluster kind
 ```
 
+### Monitoramento local (opcional, separado do `k8s-local-up`)
+
+```bash
+make k8s-local-monitoring-up       # Prometheus + Loki + Grafana + Alloy (namespace monitoring, ~2 GiB extras)
+make k8s-local-monitoring-grafana  # http://localhost:3000 (admin/admin)
+make k8s-local-monitoring-status
+make k8s-local-monitoring-down
+```
+
 ---
 
 ## Overlay de produção
@@ -146,6 +160,23 @@ Use `overlays/production-local.example/` como template (se existir).
 make k8s-diff-prod    # ver o que será aplicado antes de aplicar
 make k8s-apply-prod   # aplicar no cluster (requer kubeconfig configurado)
 ```
+
+### Grafana Cloud (release Helm, não Kustomize)
+
+O Grafana Cloud em produção é o release Helm `grafana-cloud` (chart
+`grafana/k8s-monitoring`, valores em `k8s/monitoring/grafana-cloud/values.yaml`),
+instalado pelo CI no deploy ou manualmente:
+
+```bash
+make grafana-cloud-check     # garante que o release não exige escopo de cluster
+make grafana-cloud-diff      # o que mudaria
+make grafana-cloud-install   # helm upgrade --install --atomic (exige o secret grafana-cloud-credentials)
+make grafana-cloud-status
+make grafana-cloud-rollback
+```
+
+CRD e ClusterRoles (operator, kube-state-metrics) ficam com o admin do cluster.
+Detalhes e cutover em `docs/grafana-cloud.md`.
 
 ### Secrets de produção (criar manualmente, nunca versionar)
 

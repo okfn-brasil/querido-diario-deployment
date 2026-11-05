@@ -25,7 +25,10 @@
         k8s-local-up k8s-local-down k8s-local-status k8s-local-hosts \
         k8s-local-garage-ui k8s-local-data-processing \
         k8s-local-frontend-build \
-        grafana-cloud-render
+        k8s-local-monitoring-up k8s-local-monitoring-down \
+        k8s-local-monitoring-status k8s-local-monitoring-grafana \
+        grafana-cloud-check grafana-cloud-diff grafana-cloud-install \
+        grafana-cloud-status grafana-cloud-rollback
 
 PYTHON ?= python3
 REGISTRY = ghcr.io/okfn-brasil
@@ -147,9 +150,35 @@ k8s-local-frontend-build: ## Builda e carrega a imagem do frontend no cluster ki
 	docker build --network=host -t $(FRONTEND_IMAGE):local $(FRONTEND_DIR)
 	kind load docker-image $(FRONTEND_IMAGE):local --name querido-diario-dev
 
+k8s-local-monitoring-up: ## Sobe Prometheus, Loki, Grafana e Alloy no kind local (namespace monitoring; ~2 GiB extras)
+	$(PYTHON) scripts/k8s_local_monitoring.py up
+
+k8s-local-monitoring-down: ## Remove o monitoramento local (releases e namespace monitoring)
+	$(PYTHON) scripts/k8s_local_monitoring.py down
+
+k8s-local-monitoring-status: ## Status dos pods e releases do monitoramento local
+	$(PYTHON) scripts/k8s_local_monitoring.py status
+
+k8s-local-monitoring-grafana: ## Abre port-forward do Grafana local (http://localhost:3000, admin/admin)
+	$(PYTHON) scripts/k8s_local_monitoring.py grafana
+
 # --- Grafana Cloud (monitoramento em produção) ---
 
+# Versão do chart; sobrescreva com `make GRAFANA_CLOUD_CHART_VERSION=x.y.z <alvo>`.
 GRAFANA_CLOUD_CHART_VERSION ?= 4.5.3
+export GRAFANA_CLOUD_CHART_VERSION
 
-grafana-cloud-render: ## Regenera k8s/monitoring/grafana-cloud/manifests.yaml a partir do chart Helm (aplicado via k8s-apply-prod)
-	GRAFANA_CLOUD_CHART_VERSION=$(GRAFANA_CLOUD_CHART_VERSION) $(PYTHON) scripts/grafana_cloud_render.py
+grafana-cloud-check: ## Valida que o release Helm do Grafana Cloud não exige escopo de cluster
+	$(PYTHON) scripts/grafana_cloud.py check
+
+grafana-cloud-diff: ## Mostra o que o release Helm do Grafana Cloud mudaria no cluster (helm template | kubectl diff)
+	$(PYTHON) scripts/grafana_cloud.py diff
+
+grafana-cloud-install: ## Instala/atualiza o release Helm do Grafana Cloud (--atomic; exige o secret grafana-cloud-credentials)
+	$(PYTHON) scripts/grafana_cloud.py install
+
+grafana-cloud-status: ## Mostra o status do release Helm do Grafana Cloud
+	$(PYTHON) scripts/grafana_cloud.py status
+
+grafana-cloud-rollback: ## Reverte o release Helm do Grafana Cloud para a revisão anterior
+	$(PYTHON) scripts/grafana_cloud.py rollback

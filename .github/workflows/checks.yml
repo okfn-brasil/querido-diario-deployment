@@ -21,3 +21,24 @@ jobs:
 
       - name: Valida referências a Secret/ConfigMap nos manifestos k8s
         run: python3 scripts/check_secret_refs.py
+
+  grafana-cloud:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instala Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.20.2
+
+      - name: Configura Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Testes unitários do Grafana Cloud
+        run: python3 -I -m unittest discover -s scripts/tests -v
+
+      - name: Valida o release Helm do Grafana Cloud (sem escopo de cluster)
+        run: python3 scripts/grafana_cloud.py check

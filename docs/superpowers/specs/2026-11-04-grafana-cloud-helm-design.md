@@ -20,9 +20,11 @@ de pod.
 
 ## Objetivos
 
-1. `helm upgrade --install k8s-monitoring grafana/k8s-monitoring` no namespace
+1. `helm upgrade --install grafana-cloud grafana/k8s-monitoring` no namespace
    `querido-diario`, com versão do chart fixada, a partir de `values.yaml`
    versionado — via `make` e via CI (`deploy.yml`).
+   Nota: o nome do release é `grafana-cloud` (e não `k8s-monitoring`) para manter
+   os nomes do CR Alloy/DaemonSet e os ids dos coletores no Fleet Management.
 2. Tudo o que o ServiceAccount `openknowledge` consegue fazer no namespace
    é automatizado; o que exige escopo de cluster continua com o admin do
    Revoada, por e-mail, e fica reduzido ao mínimo e documentado.
@@ -54,7 +56,7 @@ de pod.
 
 - **Divisão de responsabilidades (opção 1):** o admin instala uma vez, por
   e-mail, os recursos de escopo de cluster; o CI faz `helm upgrade` do
-  `k8s-monitoring` com esses componentes desligados.
+  release com esses componentes desligados.
 - **Local:** alvo separado, não incluído no `k8s-local-up`.
 - **Escopo local:** dashboards, métricas e logs de pod.
 - Prod coleta logs só do namespace `querido-diario` (volume do Loki).
@@ -104,7 +106,7 @@ de pod.
 - Logs em prod: manter o modelo atual (Fleet Management). Se for preciso
   habilitar por values, usar `podLogsViaLoki` restrito ao namespace
   `querido-diario`; o builder verifica se `remoteConfig` é compatível.
-- Migração: o release `k8s-monitoring` ainda não existe. A 1ª instalação precisa
+- Migração: o release `grafana-cloud` ainda não existe. A 1ª instalação precisa
   adotar ou substituir os recursos já criados por `kubectl apply` (mesmos nomes).
   O builder define o procedimento (remover antes e reinstalar, ou adotar com
   as anotações `meta.helm.sh/*`) e o janela com possível perda de métricas.
