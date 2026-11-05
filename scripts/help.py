@@ -23,6 +23,13 @@ SECTIONS = [
         ("make k8s-local-monitoring-status", "status do monitoramento local"),
         ("make k8s-local-monitoring-down", "remove o monitoramento local"),
     ]),
+    ("Grafana Cloud (produção)", [
+        ("make grafana-cloud-check", "valida que o release Helm não exige escopo de cluster"),
+        ("make grafana-cloud-diff", "mostra o que o release mudaria no cluster"),
+        ("make grafana-cloud-install", "helm upgrade --install --atomic (exige o secret grafana-cloud-credentials)"),
+        ("make grafana-cloud-status", "status do release Helm"),
+        ("make grafana-cloud-rollback", "reverte para a revisão anterior"),
+    ]),
     ("Kubernetes (kustomize)", [
         ("make k8s-build-dev", "dry-run overlay dev"),
         ("make k8s-build-prod", "dry-run overlay producao"),

@@ -29,6 +29,8 @@ jobs:
 
       - name: Instala Helm
         uses: azure/setup-helm@v4
+        with:
+          version: v3.20.2
 
       - name: Configura Python
         uses: actions/setup-python@v5

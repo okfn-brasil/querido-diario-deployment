@@ -8,6 +8,10 @@ on:
 env:
   NAMESPACE: querido-diario
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   check-secret-refs:
     runs-on: ubuntu-latest
@@ -184,6 +188,8 @@ jobs:
 
       - name: Instala Helm
         uses: azure/setup-helm@v4
+        with:
+          version: v3.20.2
 
       - name: Diff Grafana Cloud
         run: python3 scripts/grafana_cloud.py diff || true

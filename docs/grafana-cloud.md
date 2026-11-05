@@ -145,12 +145,13 @@ Aguarde a confirmação antes de seguir. Texto sugerido (sem hostnames nem IPs):
 >    (`grafana-cloud-alloy-operator*`); o ClusterRole e o ClusterRoleBinding
 >    `grafana-cloud-kube-state-metrics`; e a permissão do `openknowledge` em
 >    `alloys.collectors.grafana.com` no namespace.
-> 2. **Remover** os restos do SDK injector, que desligamos: o
->    `MutatingWebhookConfiguration` e o `ValidatingWebhookConfiguration`
->    `grafana-cloud-k8s-injection-controller*`, e o ClusterRole e o
->    ClusterRoleBinding `grafana-cloud-k8s-injection-controller`. Pedimos que
->    isso seja feito **antes** de apagarmos o Deployment do injector (o webhook
->    de ConfigMaps tem `failurePolicy: Fail` e bloquearia ConfigMaps do
+> 2. **Remover** os restos do SDK injector, que desligamos:
+>    `MutatingWebhookConfiguration/grafana-cloud-k8s-injection-controller-mutating-webhook`,
+>    `ValidatingWebhookConfiguration/grafana-cloud-k8s-injection-controller-validating-webhook`,
+>    `ClusterRole/grafana-cloud-k8s-injection-controller-manager-role` e
+>    `ClusterRoleBinding/grafana-cloud-k8s-injection-controller-manager-rolebinding`.
+>    Pedimos que isso seja feito **antes** de apagarmos o Deployment do injector
+>    (o webhook de ConfigMaps tem `failurePolicy: Fail` e bloquearia ConfigMaps do
 >    namespace se o controller sumisse primeiro).
 >
 > Nada mais é necessário. Avisem quando estiver feito, por favor.
@@ -230,6 +231,22 @@ kubectl delete -n querido-diario --dry-run=server \
   rolebinding/grafana-cloud-alloy-sdk-injector
 ```
 
+Teste do webhook de ConfigMaps (logo após apagar os objetos do injector, antes
+do merge). O webhook antigo tem `failurePolicy: Fail`; se o admin ainda não o
+removeu, **todo** ConfigMap criado/alterado no namespace é rejeitado (inclusive
+o `grafana-cloud-alloy` do install Helm, e o `--atomic` falharia). O dry-run no
+servidor chama o webhook:
+
+```bash
+kubectl config current-context
+kubectl create configmap qd-webhook-probe -n querido-diario --dry-run=server
+```
+
+Se falhar, **PARE, não mergeie** e acione o admin. Opcional, para contextos que
+leem escopo de cluster:
+`kubectl get validatingwebhookconfiguration,mutatingwebhookconfiguration | grep injection`
+(não deve listar nada).
+
 Conferência antes do merge (repita-a **imediatamente antes de clicar em merge**,
 para garantir que nenhum deploy recriou os objetos antigos):
 
@@ -246,6 +263,14 @@ removido). Se algo do release antigo restar, o `helm install` falhará.
 Com a confirmação do admin, o passo 2 feito e a conferência acima repetida,
 mergeie: o `deploy.yml` roda `helm upgrade --install --atomic` e cria o release
 `grafana-cloud`. Só retire o congelamento depois que esse deploy terminar.
+
+O CI pina o Helm em v3.20.2 (`azure/setup-helm`, em `deploy.yml` e `checks.yml`);
+subir essa versão exige revalidar o `--atomic` (Helm 4 mudou flags, `--wait` e
+usa server-side apply). O `deploy.yml` tem `concurrency` (`deploy-production`,
+sem cancelar), então não há dois deploys simultâneos. Se um release ficar preso em
+`pending-install`/`pending-upgrade` (execução interrompida), rode
+`helm rollback grafana-cloud -n querido-diario` ou, se foi o 1º install,
+`helm uninstall grafana-cloud -n querido-diario`.
 
 Alternativa, antes do merge: `make grafana-cloud-diff` e
 `make grafana-cloud-install`. Ela só é segura **sob o mesmo congelamento**: um
@@ -281,7 +306,7 @@ alguns minutos sem métricas e logs entre o passo 2 e o DaemonSet novo `Running`
 
 - Falha no `helm upgrade --install` (CI ou make): `--atomic` já reverte; no 1º
   install, desfaz o release inteiro.
-- Release instalado com problema: `make grafana-cloud-rollback` (`helm rollback`)
+- Release instalado com problema: `make grafana-cloud-rollback` (`helm rollback`; logo após o 1º install não há revisão anterior, então use `helm uninstall`)
   ou `helm uninstall grafana-cloud -n querido-diario`.
 - Voltar ao YAML estático: extraia o arquivo antigo
   (`git show 7d8c49f:k8s/monitoring/grafana-cloud/manifests.yaml > /tmp/manifests.yaml`),
