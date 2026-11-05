@@ -44,3 +44,7 @@ scripts/db-migration/.opensearch-migrate-checkpoint
 # Bytecode cache dos scripts Python de automação
 __pycache__/
 *.pyc
+
+# git worktrees e artefatos do subagent-driven-development
+.worktrees/
+.superpowers/
