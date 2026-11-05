@@ -150,11 +150,9 @@ k8s-local-frontend-build: ## Builda e carrega a imagem do frontend no cluster ki
 
 # --- Grafana Cloud (monitoramento em produção) ---
 
-# Versão do chart: default em scripts/grafana_cloud.py; sobrescreva com
-# `make GRAFANA_CLOUD_CHART_VERSION=x.y.z <alvo>` (exportada ao script).
-ifdef GRAFANA_CLOUD_CHART_VERSION
+# Versão do chart; sobrescreva com `make GRAFANA_CLOUD_CHART_VERSION=x.y.z <alvo>`.
+GRAFANA_CLOUD_CHART_VERSION ?= 4.5.3
 export GRAFANA_CLOUD_CHART_VERSION
-endif
 
 grafana-cloud-check: ## Valida que o release Helm do Grafana Cloud não exige escopo de cluster
 	$(PYTHON) scripts/grafana_cloud.py check

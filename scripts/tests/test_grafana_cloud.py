@@ -62,6 +62,36 @@ class HelmArgsTest(unittest.TestCase):
             gc.helm_args("nope", "4.5.3", Path("v.yaml"))
 
 
+class ChartVersionTest(unittest.TestCase):
+    def test_env_value(self):
+        self.assertEqual(gc.chart_version_from_env({"GRAFANA_CLOUD_CHART_VERSION": "9.9.9"}), "9.9.9")
+
+    def test_unset_and_empty_fall_back(self):
+        self.assertEqual(gc.chart_version_from_env({}), "4.5.3")
+        self.assertEqual(gc.chart_version_from_env({"GRAFANA_CLOUD_CHART_VERSION": ""}), "4.5.3")
+
+
+class PassthroughTest(unittest.TestCase):
+    def test_missing_binary_is_friendly(self):
+        for cmd in ("status", "rollback"):
+            err = io.StringIO()
+            with mock.patch.object(gc.subprocess, "run", side_effect=FileNotFoundError("helm")), \
+                    redirect_stderr(err):
+                rc = gc.main(["grafana_cloud.py", cmd])
+            self.assertEqual(rc, 1)
+            self.assertIn("comando não encontrado: helm", err.getvalue())
+
+    def test_install_missing_helm_is_friendly(self):
+        err = io.StringIO()
+        with mock.patch.object(gc, "check", return_value=0), \
+                mock.patch.object(gc, "credentials_secret_exists", return_value=True), \
+                mock.patch.object(gc.subprocess, "run", side_effect=FileNotFoundError("helm")), \
+                redirect_stderr(err):
+            rc = gc.main(["grafana_cloud.py", "install"])
+        self.assertEqual(rc, 1)
+        self.assertIn("comando não encontrado: helm", err.getvalue())
+
+
 class InstallTest(unittest.TestCase):
     def test_missing_secret_aborts_before_helm(self):
         err = io.StringIO()

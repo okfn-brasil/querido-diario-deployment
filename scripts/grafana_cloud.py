@@ -23,7 +23,14 @@ import pycommon as pc  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 VALUES = ROOT / "k8s" / "monitoring" / "grafana-cloud" / "values.yaml"
-CHART_VERSION = os.environ.get("GRAFANA_CLOUD_CHART_VERSION", "4.5.3")
+DEFAULT_CHART_VERSION = "4.5.3"  # fallback p/ uso direto; o Makefile sempre exporta a variável
+
+
+def chart_version_from_env(env) -> str:
+    return env.get("GRAFANA_CLOUD_CHART_VERSION") or DEFAULT_CHART_VERSION
+
+
+CHART_VERSION = chart_version_from_env(os.environ)
 RELEASE = "grafana-cloud"
 NAMESPACE = "querido-diario"
 CHART = "grafana/k8s-monitoring"
@@ -91,6 +98,14 @@ def _captured(cmd: list[str]) -> subprocess.CompletedProcess:
         raise HelmError(f"falhou: {' '.join(cmd[:3])} (exit {e.returncode})\n{e.stderr or ''}".rstrip()) from e
 
 
+def _run_passthrough(cmd: list[str]) -> int:
+    """Roda o comando com saída direta ao terminal; binário ausente vira HelmError."""
+    try:
+        return subprocess.run(cmd).returncode
+    except FileNotFoundError as e:
+        raise HelmError(f"comando não encontrado: {cmd[0]} ({e})") from e
+
+
 def _template_args(chart_version: str, values: Path) -> list[str]:
     return [
         "helm", "template", RELEASE, CHART, "--version", chart_version,
@@ -155,17 +170,17 @@ def install() -> int:
         )
         pc.err(f"secret {SECRET} não existe no namespace {NAMESPACE}")  # sai com 1
         return 1
-    return subprocess.run(helm_args("install", CHART_VERSION, VALUES)).returncode
+    return _run_passthrough(helm_args("install", CHART_VERSION, VALUES))
 
 
 def status() -> int:
-    rc = subprocess.run(["helm", "status", RELEASE, "-n", NAMESPACE]).returncode
-    rc2 = subprocess.run(["helm", "list", "-n", NAMESPACE]).returncode
+    rc = _run_passthrough(["helm", "status", RELEASE, "-n", NAMESPACE])
+    rc2 = _run_passthrough(["helm", "list", "-n", NAMESPACE])
     return rc or rc2
 
 
 def rollback() -> int:
-    return subprocess.run(["helm", "rollback", RELEASE, "0", "-n", NAMESPACE]).returncode
+    return _run_passthrough(["helm", "rollback", RELEASE, "0", "-n", NAMESPACE])
 
 
 COMMANDS = {"check": check, "diff": diff, "install": install, "status": status, "rollback": rollback}
