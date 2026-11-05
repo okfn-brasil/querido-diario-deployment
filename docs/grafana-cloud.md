@@ -70,8 +70,11 @@ O que fica com o admin (já instalado; só precisa **permanecer**):
 - ClusterRole/Binding `grafana-cloud-kube-state-metrics`;
 - permissão do `openknowledge` em `alloys.collectors.grafana.com` no namespace.
 
-O que o admin **remove** (uma vez): os webhooks e ClusterRoles do SDK injector
-(e-mail abaixo).
+O que o admin pode **remover depois**, sem pressa (limpeza opcional, e-mail no
+passo 1 do cutover): os webhooks e o ClusterRole/Binding do SDK injector. Não é
+pré-requisito do cutover: o webhook de ConfigMaps do injector está com
+`failurePolicy: Ignore` (o admin trocou por causa do deadlock do 1º install e
+nunca voltou para `Fail`), então ele não bloqueia nada mesmo sem backend.
 
 O operator (`0.8.0`, embutido no chart 4.5.3) já está no cluster. Ao subir a
 versão do chart, confira a versão do operator embutida e avise o admin se mudar.
@@ -127,9 +130,17 @@ recriar o DaemonSet e dos coletores voltarem ao Fleet Management).
 Os comandos abaixo atuam em **produção**, e o contexto padrão do `kubectl` nesta
 máquina é o de produção. Confirme o contexto antes de cada passo.
 
-### 1. E-mail ao admin do Revoada
+### 1. E-mail ao admin do Revoada (opcional — limpeza, pode ser depois do cutover)
 
-Aguarde a confirmação antes de seguir. Texto sugerido (sem hostnames nem IPs):
+**Não é pré-requisito do cutover.** Os recursos de escopo de cluster que o release
+precisa (CRD e ClusterRoles do operator, ClusterRole do KSM) já existem e só
+precisam permanecer; nada muda para o admin. O pedido abaixo é só a limpeza dos
+restos do SDK injector (2 webhooks, 1 ClusterRole, 1 ClusterRoleBinding), que
+ficam parados e inofensivos até lá: o passo 2 apaga o Deployment e o Service do
+injector, e como o webhook de ConfigMaps está com `failurePolicy: Ignore`, a
+chamada ao Service inexistente é ignorada pelo API server (a sonda do passo 2
+confirma isso na prática). Envie quando quiser. Texto sugerido (sem hostnames nem
+IPs):
 
 > Assunto: Grafana Cloud no namespace querido-diario — ajuste de recursos de cluster
 >
@@ -150,9 +161,9 @@ Aguarde a confirmação antes de seguir. Texto sugerido (sem hostnames nem IPs):
 >    `ValidatingWebhookConfiguration/grafana-cloud-k8s-injection-controller-validating-webhook`,
 >    `ClusterRole/grafana-cloud-k8s-injection-controller-manager-role` e
 >    `ClusterRoleBinding/grafana-cloud-k8s-injection-controller-manager-rolebinding`.
->    Pedimos que isso seja feito **antes** de apagarmos o Deployment do injector
->    (o webhook de ConfigMaps tem `failurePolicy: Fail` e bloquearia ConfigMaps do
->    namespace se o controller sumisse primeiro).
+>    O Deployment do injector já terá sido apagado por nós; esses webhooks
+>    apontam para um Service que não existe mais (a política deles é `Ignore`,
+>    então não há impacto, só sujeira).
 >
 > Nada mais é necessário. Avisem quando estiver feito, por favor.
 >
@@ -232,20 +243,24 @@ kubectl delete -n querido-diario --dry-run=server \
 ```
 
 Teste do webhook de ConfigMaps (logo após apagar os objetos do injector, antes
-do merge). O webhook antigo tem `failurePolicy: Fail`; se o admin ainda não o
-removeu, **todo** ConfigMap criado/alterado no namespace é rejeitado (inclusive
+do merge). O webhook antigo do injector está com `failurePolicy: Ignore` (segundo
+o mantenedor; não dá para ler essa configuração com o ServiceAccount de deploy),
+então, mesmo sem o backend, não deve bloquear ConfigMaps. Se estivesse como
+`Fail`, **todo** ConfigMap criado/alterado no namespace seria rejeitado (inclusive
 o `grafana-cloud-alloy` do install Helm, e o `--atomic` falharia). O dry-run no
-servidor chama o webhook:
+servidor chama o webhook e confirma o comportamento real:
 
 ```bash
 kubectl config current-context
 kubectl create configmap qd-webhook-probe -n querido-diario --dry-run=server
 ```
 
-Se falhar, **PARE, não mergeie** e acione o admin. Opcional, para contextos que
-leem escopo de cluster:
+Se falhar, **PARE, não mergeie** e acione o admin (peça para trocar o webhook
+`grafana-cloud-k8s-injection-controller-validating-webhook` para `Ignore` ou
+removê-lo). Opcional, para contextos que leem escopo de cluster:
 `kubectl get validatingwebhookconfiguration,mutatingwebhookconfiguration | grep injection`
-(não deve listar nada).
+e confira o `failurePolicy` (enquanto o admin não fizer a limpeza do passo 1, os
+webhooks continuam listados; tudo bem se a sonda passar).
 
 Conferência antes do merge (repita-a **imediatamente antes de clicar em merge**,
 para garantir que nenhum deploy recriou os objetos antigos):
@@ -260,7 +275,7 @@ removido). Se algo do release antigo restar, o `helm install` falhará.
 
 ### 3. Merge
 
-Com a confirmação do admin, o passo 2 feito e a conferência acima repetida,
+Com o passo 2 feito, a sonda do webhook passando e a conferência acima repetida,
 mergeie: o `deploy.yml` roda `helm upgrade --install --atomic` e cria o release
 `grafana-cloud`. Só retire o congelamento depois que esse deploy terminar.
 
@@ -299,8 +314,8 @@ alguns minutos sem métricas e logs entre o passo 2 e o DaemonSet novo `Running`
   sobe com a imagem esperada e sem reinícios em loop.
 - O KSM continua listando `nodes`/`namespaces` (o ClusterRole do admin foi
   mantido): `kube_node_info` presente no Grafana Cloud.
-- O webhook de ConfigMaps do injector não existe mais (passo 1): criar/alterar
-  ConfigMaps no namespace funciona normalmente.
+- Criar/alterar ConfigMaps no namespace funciona normalmente (o webhook do
+  injector, mesmo órfão, é `Ignore`; a sonda do passo 2 já testou).
 
 ### Rollback
 
@@ -311,7 +326,7 @@ alguns minutos sem métricas e logs entre o passo 2 e o DaemonSet novo `Running`
 - Voltar ao YAML estático: extraia o arquivo antigo
   (`git show 7d8c49f:k8s/monitoring/grafana-cloud/manifests.yaml > /tmp/manifests.yaml`),
   `helm uninstall grafana-cloud -n querido-diario` e aplique só os objetos que
-  precisar (o admin já removeu o injector, então não reaplique os dele). Não
+  precisar (o injector está desligado, então não reaplique os dele). Não
   apague o Secret `grafana-cloud-credentials`.
 
 ## Nome do cluster
