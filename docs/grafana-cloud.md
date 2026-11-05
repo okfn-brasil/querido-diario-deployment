@@ -108,6 +108,16 @@ kubectl create secret generic grafana-cloud-credentials -n querido-diario \
 > adotá-los ("exists and cannot be imported into the current release") e o
 > `--atomic` reverterá — o deploy de **todo** o `main` fica vermelho. Siga a
 > ordem abaixo.
+>
+> **ATENÇÃO — congelamento de `main`.** Enquanto o branch não for mergeado, o
+> overlay de `main` ainda contém `../../monitoring/grafana-cloud`, e o
+> `deploy.yml` dispara em todo push em `main` **e** em `workflow_dispatch`. Um
+> push ou execução manual entre o passo 2 (apagar) e o passo 3 (merge) roda
+> `kubectl apply -k` e recria os 24 objetos antigos (injector incluso), o que
+> reintroduz a colisão acima. Portanto: **avise a equipe e congele pushes em
+> `main` e execuções manuais do workflow de deploy desde o início do passo 2
+> até o fim do deploy disparado pelo merge** (passo 3). Faça o passo 2 apenas
+> quando o merge estiver pronto para ser clicado em seguida.
 
 O `kubectl apply -k` sem `--prune` não remove nada, e o Helm só adota objetos
 com as anotações `meta.helm.sh/*`. A estratégia é **remover e reinstalar**,
@@ -151,6 +161,11 @@ Antes de enviar, confira os nomes exatos:
 `kubectl get clusterrole,clusterrolebinding,mutatingwebhookconfiguration,validatingwebhookconfiguration | grep grafana-cloud`.
 
 ### 2. Remover os recursos namespaced do release antigo
+
+**Congelamento:** anuncie o congelamento de `main` (pushes e execuções manuais
+do deploy) **antes** de começar este passo; ele só termina quando o deploy do
+merge (passo 3) concluir. Rode este passo imediatamente antes do merge, com o PR
+aprovado e verde.
 
 Fonte da verdade: o `manifests.yaml` antigo, preservado no histórico:
 `git show 7d8c49f:k8s/monitoring/grafana-cloud/manifests.yaml` (24 objetos no
@@ -215,7 +230,8 @@ kubectl delete -n querido-diario --dry-run=server \
   rolebinding/grafana-cloud-alloy-sdk-injector
 ```
 
-Conferência antes do merge:
+Conferência antes do merge (repita-a **imediatamente antes de clicar em merge**,
+para garantir que nenhum deploy recriou os objetos antigos):
 
 ```bash
 kubectl get all,configmap,secret,role,rolebinding,alloy -n querido-diario | grep grafana-cloud
@@ -227,9 +243,14 @@ removido). Se algo do release antigo restar, o `helm install` falhará.
 
 ### 3. Merge
 
-Com a confirmação do admin e o passo 2 feitos, mergeie: o `deploy.yml` roda
-`helm upgrade --install --atomic` e cria o release `grafana-cloud`. Alternativa,
-antes do merge: `make grafana-cloud-diff` e `make grafana-cloud-install`.
+Com a confirmação do admin, o passo 2 feito e a conferência acima repetida,
+mergeie: o `deploy.yml` roda `helm upgrade --install --atomic` e cria o release
+`grafana-cloud`. Só retire o congelamento depois que esse deploy terminar.
+
+Alternativa, antes do merge: `make grafana-cloud-diff` e
+`make grafana-cloud-install`. Ela só é segura **sob o mesmo congelamento**: um
+deploy de `main` nessa janela aplicaria o YAML antigo (`kubectl apply -k`) por
+cima de objetos agora pertencentes ao Helm.
 
 ### 4. Verificar
 
