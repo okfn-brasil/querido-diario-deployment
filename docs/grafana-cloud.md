@@ -269,9 +269,14 @@ para garantir que nenhum deploy recriou os objetos antigos):
 kubectl get all,configmap,secret,role,rolebinding,alloy -n querido-diario | grep grafana-cloud
 ```
 
-Devem restar só os 5 objetos do operator e o Secret `grafana-cloud-credentials`
-(além do release interno do operator, se o DaemonSet ainda estiver sendo
-removido). Se algo do release antigo restar, o `helm install` falhará.
+Devem restar só os 5 objetos do operator (o `grep` também mostra o Pod e o
+ReplicaSet do operator, que são derivados do Deployment), o Secret
+`grafana-cloud-credentials` e o `rolebinding/grafana-cloud-alloy-manager`. Este
+último **não** é do release antigo: foi criado pelo admin e dá ao ServiceAccount
+`openknowledge` acesso a `alloys.collectors.grafana.com` no namespace; **não o
+apague**, sem ele o `helm install` não consegue criar o CR `Alloy`. (Além disso,
+pode aparecer o release interno do operator, se o DaemonSet ainda estiver sendo
+removido.) Se algo do release antigo restar, o `helm install` falhará.
 
 ### 3. Merge
 
