@@ -1,0 +1,38 @@
+---
+# Monitoramento do namespace de testes no Revoada (B1.1, querido-diario-estados#42).
+#
+# O Revoada já tem um kube-prometheus com os padrões (Prometheus `prometheus-k8s`
+# no namespace `monitoring`, retenção de 1 dia), então não instalamos outro
+# kube-prometheus-stack no cluster compartilhado. Este componente só acrescenta
+# o que falta no nosso namespace para esse Prometheus coletar a aplicação:
+#
+# - Role/RoleBinding `prometheus-k8s`: o SA monitoring/prometheus-k8s só tem
+#   permissão em default, kube-system e monitoring; sem ela, nenhum
+#   ServiceMonitor/PodMonitor do namespace vira alvo (testado em 24/11/2026).
+# - Pushgateway, que recebe as métricas qd_* do CronJob data-processing (B2),
+#   e o ServiceMonitor dele com honorLabels: true.
+# - PUSHGATEWAY_URL do app-config apontando para esse Pushgateway.
+#
+# Os seletores de namespace do prometheus-k8s já incluem o querido-diario-tcc e
+# os de ServiceMonitor/PodMonitor são vazios: nenhuma label específica é
+# necessária. Os PodMonitors da fila (modo B/C) ficam em
+# ../queue-pipeline/monitoring.
+#
+# O namespace vem do overlay (namespace: querido-diario-tcc).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - prometheus-k8s-rbac.yaml
+  - pushgateway.yaml
+  - pushgateway-servicemonitor.yaml
+
+patches:
+  - patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: app-config
+        namespace: querido-diario
+      data:
+        PUSHGATEWAY_URL: "pushgateway:9091"
