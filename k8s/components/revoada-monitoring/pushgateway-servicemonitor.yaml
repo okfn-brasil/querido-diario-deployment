@@ -1,0 +1,18 @@
+---
+# honorLabels: true preserva o job="data-processing" (e o mode) enviados pelo
+# CronJob. Sem ele, o Prometheus renomeia para exported_job e o job vira o do
+# próprio Pushgateway, e as consultas do dashboard (B3) e do export_metrics.py
+# (D2) ficam vazias.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pushgateway
+  namespace: querido-diario
+spec:
+  selector:
+    matchLabels:
+      app: pushgateway
+  endpoints:
+    - port: http
+      interval: 15s
+      honorLabels: true

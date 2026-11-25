@@ -216,6 +216,25 @@ processos batch, como o CronJob `data-processing`: no overlay dev o
 `PUSHGATEWAY_URL` do `app-config` já aponta para ele, e cada execução
 (`make k8s-local-data-processing`) envia as séries `qd_*` ao fim do pipeline.
 
+#### No Revoada (namespace `querido-diario-tcc`)
+
+O Revoada já tem um kube-prometheus com os padrões: Prometheus `prometheus-k8s`
+e Grafana no namespace `monitoring`, retenção de 1 dia. Não instalamos outro.
+O componente `k8s/components/revoada-monitoring`, a ser incluído pelos overlays
+do Revoada, acrescenta ao nosso namespace:
+
+- a Role/RoleBinding `prometheus-k8s`, sem a qual o Prometheus do cluster não
+  enxerga os alvos dos nossos `ServiceMonitor`/`PodMonitor`;
+- um Pushgateway (`pushgateway:9091`) com `ServiceMonitor` e `honorLabels: true`,
+  para que as séries do CronJob mantenham o `job="data-processing"`;
+- o `PUSHGATEWAY_URL` do `app-config` apontando para ele.
+
+Os seletores do `prometheus-k8s` já incluem o `querido-diario-tcc` e aceitam
+qualquer `ServiceMonitor`/`PodMonitor`, sem label específica. Nos modos com a
+fila, inclua também os PodMonitors de `k8s/components/queue-pipeline/monitoring`.
+O Grafana do Revoada não carrega dashboards de ConfigMaps: importe o
+`qd-pipeline.json` pela interface ou pela API, usando o datasource `prometheus`.
+
 ### Fila de extração (KEDA)
 
 Alternativa ao CronJob `data-processing` (ADR-0009/0010 do
