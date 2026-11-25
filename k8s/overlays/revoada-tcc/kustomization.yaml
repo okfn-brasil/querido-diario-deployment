@@ -97,6 +97,27 @@ patches:
       kind: StatefulSet
       name: opensearch
 
+  # Memória do OpenSearch: o heap continua o do dev (512 MiB), mas o limite
+  # do contêiner sobe de 1500 MiB para 3 GiB. No kind o índice fica num NVMe
+  # local e cabe no cache de páginas; aqui ele fica no ceph-block-hdd e, com
+  # 1500 MiB (heap + off-heap ocupando quase tudo), sobrava pouco cache para o
+  # índice (~870 MB com os 500 diários do E1): cada busca de tema relia o HDD
+  # pela rede (20–60 s cada, contra ~1 s no kind), e o Job do modo A passava
+  # de 1 h só nos temas (piloto da campanha R, 25/11/2026). Request igual ao
+  # limite para o cache não ser disputado no nó. Compensa a diferença de
+  # disco; o heap, que limita o processamento, é o mesmo nas duas campanhas
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: 3Gi
+          limits:
+            memory: 3Gi
+    target:
+      kind: StatefulSet
+      name: opensearch
+
   # ── ConfigMap: o que no dev aponta para o kind ───────────────────────────
   # O STORAGE_ENDPOINT (http://garage:3900) já serve. Os arquivos não são
   # abertos por navegador, então a URL pública fica com o próprio Garage
