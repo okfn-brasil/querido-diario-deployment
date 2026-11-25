@@ -1,0 +1,7 @@
+# Aplicado com `target` no kustomization.yaml: remove do build cada recurso
+# selecionado. apiVersion/kind/nome aqui são só para o patch ser válido.
+$patch: delete
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: removido

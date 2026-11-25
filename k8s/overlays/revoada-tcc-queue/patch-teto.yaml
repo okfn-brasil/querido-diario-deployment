@@ -1,0 +1,6 @@
+# Teto de workers do modo C na campanha R. Ajustar aqui depois da calibração
+# do D5 (querido-diario-estados#31) e registrar no protocolo. Enquanto o D5 não
+# roda, fica o teto do componente queue-pipeline (6).
+- op: replace
+  path: /spec/maxReplicaCount
+  value: 6

@@ -1,0 +1,19 @@
+---
+# Imagens da campanha R, fixadas por digest. Component, e não `images:` no
+# overlay, para valer também para os recursos que o revoada-tcc-queue
+# acrescenta (o transformer de um overlay só alcança os recursos dele).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+images:
+  # Imagem com o código da fila (C3) e das métricas (B2), publicada em 24/11/2026
+  # a partir do main-estados do querido-diario-data-processing (ae4abc3). O digest fixa a mesma
+  # imagem nos modos A, B e C; ao republicar, troque o digest aqui e registre
+  # no diário de bordo
+  - name: ghcr.io/okfn-brasil/querido-diario-data-processing
+    newName: ghcr.io/okfn-brasil/querido-diario-data-processing
+    newTag: tcc-fila
+    digest: sha256:addd0fcb4255e8a0a9fb03f1fe47c61e5e78de8200677ea5769e4af136c3a010
+  # Tika compartilhado (modo A) e sidecar (B/C): o :latest do GHCR (build de 12/04/2026), fixado
+  - name: ghcr.io/okfn-brasil/querido-diario-data-processing/apache-tika
+    digest: sha256:d72830f9cedb8c02c5b2d1052634f1ff4baa3cd2ca1f868d57f8970136b8a36b
