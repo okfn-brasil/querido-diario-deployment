@@ -107,16 +107,24 @@ kubectl apply -k k8s/overlays/revoada-tcc $CTX
 
 ### KEDA no Revoada
 
-Em 24/11/2026 o operador do KEDA do cluster não reconciliava o `ScaledObject`
-do namespace (sem finalizer, sem `status` e sem HPA), embora os CRDs e a API
-`external.metrics.k8s.io` existam. Sem ele, os workers não saem de 0. Até o
-administrador do cluster resolver, dá para testar o pipeline da fila
-escalando à mão (`kubectl scale deploy/extraction-worker --replicas=2`), mas
-os modos B e C da campanha dependem do KEDA. Para conferir:
+O KEDA do Revoada observa todos os namespaces, mas só os objetos com o label
+`keda=enabled` (`ScaledObject`, `ScaledJob`, HPA e `TriggerAuthentication`).
+O `revoada-tcc-queue` acrescenta esse label ao `ScaledObject`. Sem ele, o
+`ScaledObject` fica sem `status` e sem HPA, e os workers não saem de 0. Um
+`ScaledObject` novo precisa do mesmo label. Para conferir:
 
 ```bash
 kubectl get scaledobject,hpa -n $NS $CTX   # READY=True e um HPA keda-hpa-extraction-worker
 ```
+
+### Nós
+
+Só a `hipo2` e a `hipo3` aceitam pods (Xeon Gold 5418Y, 48 núcleos com HT,
+512 GB de RAM). Os outros nós têm o taint `control-plane:NoSchedule`. Os
+volumes ficam no Ceph, menos o do `redis-queue` (`local-path`), que prende o
+pod ao nó em que foi criado. A `hipo2` também roda outras cargas do cluster:
+registre `kubectl top nodes $CTX` no início de cada execução, como pede o
+protocolo.
 
 ## Rodar uma carga
 

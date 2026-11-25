@@ -34,6 +34,17 @@ patches:
       kind: ScaledObject
       name: extraction-worker
 
+  # O KEDA do Revoada só observa objetos com o label keda=enabled
+  # (ScaledObject, ScaledJob, HPA, TriggerAuthentication): sem ele o
+  # ScaledObject fica sem status nem HPA e os workers não saem de 0 (#58)
+  - patch: |-
+      - op: add
+        path: /metadata/labels/keda
+        value: enabled
+    target:
+      kind: ScaledObject
+      name: extraction-worker
+
   # Teto do modo C, calibrado no D5 (querido-diario-estados#31)
   - path: patch-teto.yaml
     target:
