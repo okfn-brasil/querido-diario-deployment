@@ -25,6 +25,8 @@ k8s/
 │   └── data-processing/
 ├── overlays/
 │   ├── production/              # 2+ réplicas, 250Gi postgres, imagens fixas
+│   ├── revoada-tcc/             # TCC no Revoada (querido-diario-tcc), modo A
+│   ├── revoada-tcc-queue/       # idem, modos B/C (fila com KEDA)
 │   └── dev/                     # kind local: infra embutida, limites menores
 │       └── infra/
 │           ├── postgres-credentials-dev.yaml
@@ -234,6 +236,12 @@ qualquer `ServiceMonitor`/`PodMonitor`, sem label específica. Nos modos com a
 fila, inclua também os PodMonitors de `k8s/components/queue-pipeline/monitoring`.
 O Grafana do Revoada não carrega dashboards de ConfigMaps: importe o
 `qd-pipeline.json` pela interface ou pela API, usando o datasource `prometheus`.
+
+O componente é incluído pelos overlays `k8s/overlays/revoada-tcc` (modo A,
+CronJob) e `k8s/overlays/revoada-tcc-queue` (modos B/C, fila com KEDA), que
+sobem só o pipeline de extração no `querido-diario-tcc` com os limites do
+overlay dev. Como subir, trocar de modo e derrubar:
+[`k8s/overlays/revoada-tcc/README.md`](overlays/revoada-tcc/README.md).
 
 ### Fila de extração (KEDA)
 

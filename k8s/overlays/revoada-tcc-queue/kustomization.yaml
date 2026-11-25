@@ -1,0 +1,74 @@
+---
+# Namespace de testes do TCC no Revoada, modos B/C: fila de extração com KEDA
+# (componente queue-pipeline) sobre o overlay revoada-tcc (modo A), como o
+# dev-queue faz sobre o dev. Mesma imagem (digest) e mesmos limites do modo A.
+#
+# O modo B é este overlay com minReplicaCount=maxReplicaCount=1 no
+# ScaledObject, aplicado na hora pelo run_experiment.sh (E-2); o C usa o teto
+# de patch-teto.yaml (D5).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# O namespace e as imagens do revoada-tcc não alcançam os recursos
+# acrescentados aqui: repetidos para eles
+namespace: querido-diario-tcc
+
+resources:
+  - ../revoada-tcc
+  # PodMonitors do extraction-worker e do redis-queue (B1.1/#42): o CRD existe
+  # no Revoada, então entram junto
+  - ../../components/queue-pipeline/monitoring
+
+components:
+  - ../../components/queue-pipeline
+  - ../revoada-tcc/imagens
+
+patches:
+  # O trigger do KEDA leva o namespace no endereço, fora do alcance do
+  # transformer `namespace:`
+  - patch: |-
+      - op: replace
+        path: /spec/triggers/0/metadata/address
+        value: redis-queue.querido-diario-tcc.svc.cluster.local:6379
+    target:
+      kind: ScaledObject
+      name: extraction-worker
+
+  # Teto do modo C, calibrado no D5 (querido-diario-estados#31)
+  - path: patch-teto.yaml
+    target:
+      kind: ScaledObject
+      name: extraction-worker
+
+  # Tika sidecar com os mesmos limites do Tika compartilhado (controle do
+  # protocolo, igual ao dev-queue): o patch do dev aponta para containers/0
+  # do Deployment apache-tika e não alcança o sidecar
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/initContainers/0/resources/limits/memory
+        value: 1500Mi
+      - op: replace
+        path: /spec/template/spec/initContainers/0/resources/requests/memory
+        value: 512Mi
+    target:
+      kind: Deployment
+      name: extraction-worker
+
+  # Redis da fila em local-path: só a fila e a DLQ, poucos MB
+  - patch: |-
+      - op: add
+        path: /spec/storageClassName
+        value: local-path
+    target:
+      kind: PersistentVolumeClaim
+      name: redis-queue-data
+
+  # Os excertos temáticos ficam fora da medição: o run_experiment.sh liga o
+  # themes-from-queue só quando precisar
+  - patch: |-
+      - op: replace
+        path: /spec/suspend
+        value: true
+    target:
+      kind: CronJob
+      name: themes-from-queue

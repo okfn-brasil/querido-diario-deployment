@@ -1,0 +1,112 @@
+---
+# Namespace de testes do TCC no Revoada (querido-diario-tcc), modo A: CronJob
+# data-processing + Tika compartilhado. É o equivalente do overlay dev para a
+# campanha R do protocolo (querido-diario-estados#55); os modos B/C ficam em
+# ../revoada-tcc-queue, que parte deste.
+#
+# Herda o overlay dev para que Postgres, OpenSearch, Garage, Redis e Tika
+# tenham os mesmos limites da campanha K (kind): a única diferença entre as
+# campanhas deve ser o hardware, o N e o teto. Em relação ao dev, este overlay:
+#
+# - troca o namespace para querido-diario-tcc e não cria o Namespace (o token
+#   do TCC só enxerga o próprio namespace, que já existe);
+# - remove a parte web (frontend, API, backend, Celery, Redis do backend,
+#   Garage Web UI, IngressRoutes e Middlewares), que o pipeline de extração não
+#   usa;
+# - remove os Secrets com valores de dev: app-secret e postgres-credentials são
+#   criados à parte por criar-segredos.sh, fora do repositório;
+# - põe Postgres, OpenSearch e Garage no ceph-block-hdd e os Redis no
+#   local-path (dados pequenos), como orientou o admin do Revoada;
+# - fixa as imagens do data-processing e do Tika pelo digest (imagens/), as
+#   mesmas nos três modos;
+# - inclui o componente revoada-monitoring (Pushgateway + RBAC do
+#   prometheus-k8s, querido-diario-estados#42).
+#
+# Uso: ver README.md nesta pasta. Sempre com --context revoada-testes.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: querido-diario-tcc
+
+resources:
+  - ../dev
+
+components:
+  - ../../components/revoada-monitoring
+  # Imagens fixadas por digest, as mesmas nos modos A, B e C
+  - imagens
+
+patches:
+  # ── Recursos do dev que não sobem no Revoada ─────────────────────────────
+  # Um patch `$patch: delete` por seletor: o nome do patch é ignorado, vale o
+  # target
+  - path: remover.yaml
+    target:
+      kind: Namespace
+  - path: remover.yaml
+    target:
+      kind: Secret
+      name: ^(app-secret|postgres-credentials)$
+  - path: remover.yaml
+    target:
+      kind: (Deployment|Service)
+      name: ^(api|backend|celery-beat|celery-worker|frontend|garage-webui|redis)$
+  - path: remover.yaml
+    target:
+      kind: ConfigMap
+      name: ^(frontend-env|censo-estados.*)$
+  - path: remover.yaml
+    target:
+      kind: PersistentVolumeClaim
+      name: ^(redis-data|static-files)$
+  - path: remover.yaml
+    target:
+      kind: (IngressRoute|Middleware)
+
+  # ── StorageClass ─────────────────────────────────────────────────────────
+  - patch: |-
+      - op: add
+        path: /spec/storage/storageClass
+        value: ceph-block-hdd
+    target:
+      kind: Cluster
+      name: postgres
+  - patch: |-
+      - op: add
+        path: /spec/volumeClaimTemplates/0/spec/storageClassName
+        value: ceph-block-hdd
+    target:
+      kind: StatefulSet
+      name: opensearch
+  - patch: |-
+      - op: add
+        path: /spec/storageClassName
+        value: ceph-block-hdd
+    target:
+      kind: PersistentVolumeClaim
+      name: garage-data
+  # O volume do Ceph nasce com dono root (no kind, o local-path aceita
+  # qualquer usuário) e o OpenSearch roda como uid 1000: sem o fsGroup ele
+  # falha com AccessDeniedException em /usr/share/opensearch/data
+  - patch: |-
+      - op: add
+        path: /spec/template/spec/securityContext
+        value:
+          fsGroup: 1000
+    target:
+      kind: StatefulSet
+      name: opensearch
+
+  # ── ConfigMap: o que no dev aponta para o kind ───────────────────────────
+  # O STORAGE_ENDPOINT (http://garage:3900) já serve. Os arquivos não são
+  # abertos por navegador, então a URL pública fica com o próprio Garage
+  - patch: |-
+      - op: replace
+        path: /data/QUERIDO_DIARIO_FILES_ENDPOINT
+        value: http://garage:3900/queridodiariobucket
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: info
+    target:
+      kind: ConfigMap
+      name: app-config
