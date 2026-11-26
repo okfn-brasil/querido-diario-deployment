@@ -1,6 +1,8 @@
-# Teto de workers do modo C na campanha R. Ajustar aqui depois da calibração
-# do D5 (querido-diario-estados#31) e registrar no protocolo. Enquanto o D5 não
-# roda, fica o teto do componente queue-pipeline (6).
+# Teto de workers do modo C na campanha R, calibrado no D5
+# (querido-diario-estados#31, 26/11/2026): E1 no modo C, N = 500, com teto 2,
+# 4, 6 e 8 esvaziou a fila em 394, 229, 168 e 143 s. Até 6, cada réplica a mais
+# rende ~60% de uma réplica do teto 2; de 6 para 8, ~40%, e a CPU do
+# OpenSearch quase dobra (2,3 → 3,9 núcleos). O teto é o joelho dessa curva.
 - op: replace
   path: /spec/maxReplicaCount
   value: 6
