@@ -108,6 +108,21 @@ patches:
   # ajuste deixa de ser necessário: as duas campanhas ficam com os mesmos
   # limites
 
+  # Tika: limite do contêiner de 1500 MiB para 2 GiB, com o mesmo heap do dev
+  # (-Xmx1400m em JAVA_TOOL_OPTIONS). Com 1500 MiB sobravam ~100 MiB para a
+  # memória fora do heap (metaspace, threads, GC), que cresce com o número de
+  # CPUs que a JVM enxerga: 12 no notebook da campanha K, 96 nas hipos. No
+  # piloto da R (26/11/2026) o Tika foi OOMKilled no meio do E1-A; na K, nunca
+  # (48 execuções). Compensa a diferença de hardware sem mudar o heap, que é
+  # o que limita a extração
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 2Gi
+    target:
+      kind: Deployment
+      name: apache-tika
+
   # ── ConfigMap: o que no dev aponta para o kind ───────────────────────────
   # O STORAGE_ENDPOINT (http://garage:3900) já serve. Os arquivos não são
   # abertos por navegador, então a URL pública fica com o próprio Garage
