@@ -15,8 +15,12 @@
 #   usa;
 # - remove os Secrets com valores de dev: app-secret e postgres-credentials são
 #   criados à parte por criar-segredos.sh, fora do repositório;
-# - põe Postgres, OpenSearch e Garage no ceph-block-hdd e os Redis no
-#   local-path (dados pequenos), como orientou o admin do Revoada;
+# - põe Postgres, OpenSearch, Garage e os Redis no local-path (disco local
+#   do nó). Começou no ceph-block-hdd, mas o Ceph é compartilhado com o QD de
+#   produção e, sob a carga dele, um fsync de 4 KB levava de 2 a 6 s (contra
+#   1 ms no local-path; 26/11/2026): os tempos medidos passariam a depender
+#   da produção. O admin do Revoada liberou o local-path (~700 GB livres por
+#   nó);
 # - fixa as imagens do data-processing e do Tika pelo digest (imagens/), as
 #   mesmas nos três modos;
 # - inclui o componente revoada-monitoring (Pushgateway + RBAC do
@@ -67,27 +71,27 @@ patches:
   - patch: |-
       - op: add
         path: /spec/storage/storageClass
-        value: ceph-block-hdd
+        value: local-path
     target:
       kind: Cluster
       name: postgres
   - patch: |-
       - op: add
         path: /spec/volumeClaimTemplates/0/spec/storageClassName
-        value: ceph-block-hdd
+        value: local-path
     target:
       kind: StatefulSet
       name: opensearch
   - patch: |-
       - op: add
         path: /spec/storageClassName
-        value: ceph-block-hdd
+        value: local-path
     target:
       kind: PersistentVolumeClaim
       name: garage-data
-  # O volume do Ceph nasce com dono root (no kind, o local-path aceita
-  # qualquer usuário) e o OpenSearch roda como uid 1000: sem o fsGroup ele
-  # falha com AccessDeniedException em /usr/share/opensearch/data
+  # O OpenSearch roda como uid 1000. No Ceph o volume nascia com dono root e,
+  # sem o fsGroup, ele falhava com AccessDeniedException em
+  # /usr/share/opensearch/data; no local-path não é preciso, mas não atrapalha
   - patch: |-
       - op: add
         path: /spec/template/spec/securityContext
@@ -97,26 +101,12 @@ patches:
       kind: StatefulSet
       name: opensearch
 
-  # Memória do OpenSearch: o heap continua o do dev (512 MiB), mas o limite
-  # do contêiner sobe de 1500 MiB para 3 GiB. No kind o índice fica num NVMe
-  # local e cabe no cache de páginas; aqui ele fica no ceph-block-hdd e, com
-  # 1500 MiB (heap + off-heap ocupando quase tudo), sobrava pouco cache para o
-  # índice (~870 MB com os 500 diários do E1): cada busca de tema relia o HDD
-  # pela rede (20–60 s cada, contra ~1 s no kind), e o Job do modo A passava
-  # de 1 h só nos temas (piloto da campanha R, 25/11/2026). Request igual ao
-  # limite para o cache não ser disputado no nó. Compensa a diferença de
-  # disco; o heap, que limita o processamento, é o mesmo nas duas campanhas
-  - patch: |-
-      - op: replace
-        path: /spec/template/spec/containers/0/resources
-        value:
-          requests:
-            memory: 3Gi
-          limits:
-            memory: 3Gi
-    target:
-      kind: StatefulSet
-      name: opensearch
+  # Memória do OpenSearch: igual à do dev (heap 512 MiB, limite 1500 MiB). No
+  # piloto da R, com o índice no ceph-block-hdd, o limite chegou a subir para
+  # 3 GiB (as buscas de tema reliam o HDD pela rede, 20–60 s cada); com o
+  # local-path o índice volta a ficar em disco local, como no kind, e o
+  # ajuste deixa de ser necessário: as duas campanhas ficam com os mesmos
+  # limites
 
   # ── ConfigMap: o que no dev aponta para o kind ───────────────────────────
   # O STORAGE_ENDPOINT (http://garage:3900) já serve. Os arquivos não são

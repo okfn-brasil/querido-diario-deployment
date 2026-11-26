@@ -16,8 +16,10 @@ diferença em relação à campanha K seja só o hardware, o N e o teto. O que m
 
 - só o pipeline sobe: frontend, API, backend, Celery, o Redis do backend, a
   Garage Web UI e as IngressRoutes do dev ficam de fora;
-- Postgres (CNPG), OpenSearch e Garage em `ceph-block-hdd`; o `redis-queue` em
-  `local-path` (dados pequenos);
+- todos os volumes (Postgres, OpenSearch, Garage e `redis-queue`) em
+  `local-path`, como no kind. O `ceph-block-hdd` é compartilhado com o QD de
+  produção e, sob a carga dele, um fsync de 4 KB levava de 2 a 6 s (1 ms no
+  `local-path`, 26/11/2026); o admin liberou o `local-path`;
 - os PDFs ficam num Garage dentro do namespace, como no kind, e não num bucket
   do Ceph S3. Assim o storage é o mesmo da campanha K e o `load_simulator.py`
   continua usando o `svc/garage`;
@@ -121,8 +123,8 @@ kubectl get scaledobject,hpa -n $NS $CTX   # READY=True e um HPA keda-hpa-extrac
 
 Só a `hipo2` e a `hipo3` aceitam pods (Xeon Gold 5418Y, 48 núcleos com HT,
 512 GB de RAM). Os outros nós têm o taint `control-plane:NoSchedule`. Os
-volumes ficam no Ceph, menos o do `redis-queue` (`local-path`), que prende o
-pod ao nó em que foi criado. A `hipo2` também roda outras cargas do cluster:
+volumes ficam no `local-path`, que prende cada pod ao nó em que o volume foi
+criado. A `hipo2` também roda outras cargas do cluster:
 registre `kubectl top nodes $CTX` no início de cada execução, como pede o
 protocolo.
 
