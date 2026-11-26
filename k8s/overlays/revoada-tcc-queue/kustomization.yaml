@@ -53,11 +53,12 @@ patches:
 
   # Tika sidecar com os mesmos limites do Tika compartilhado (controle do
   # protocolo, igual ao dev-queue): o patch do dev aponta para containers/0
-  # do Deployment apache-tika e não alcança o sidecar
+  # do Deployment apache-tika e não alcança o sidecar. Limite de 2 GiB, como
+  # o do Tika compartilhado no revoada-tcc (ver lá o porquê); heap igual
   - patch: |-
       - op: replace
         path: /spec/template/spec/initContainers/0/resources/limits/memory
-        value: 1500Mi
+        value: 2Gi
       - op: replace
         path: /spec/template/spec/initContainers/0/resources/requests/memory
         value: 512Mi

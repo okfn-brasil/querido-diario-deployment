@@ -6,14 +6,18 @@ apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 
 images:
-  # Imagem com o código da fila (C3) e das métricas (B2), publicada em 24/11/2026
-  # a partir do main-estados do querido-diario-data-processing (ae4abc3). O digest fixa a mesma
-  # imagem nos modos A, B e C; ao republicar, troque o digest aqui e registre
-  # no diário de bordo
+  # Imagem com o código da fila (C3) e das métricas (B2) e o pushadd no
+  # Pushgateway (querido-diario-data-processing#133, 144d805): a mesma imagem da
+  # campanha K (no kind, ID bd8fc4251012, digest sha256:58fc08b3… do kind load),
+  # publicada em 25/11/2026 com a tag tcc-fila-pushadd-144d805. Substitui a
+  # tcc-fila@sha256:addd0fcb… (ae4abc3), sem o pushadd: no piloto da campanha R,
+  # um 429 nos temas fez o Job tentar de novo e o PUT vazio apagou as métricas.
+  # O digest fixa a mesma imagem nos modos A, B e C; ao republicar, troque o
+  # digest aqui e registre no diário de bordo
   - name: ghcr.io/okfn-brasil/querido-diario-data-processing
     newName: ghcr.io/okfn-brasil/querido-diario-data-processing
-    newTag: tcc-fila
-    digest: sha256:addd0fcb4255e8a0a9fb03f1fe47c61e5e78de8200677ea5769e4af136c3a010
+    newTag: tcc-fila-pushadd-144d805
+    digest: sha256:1d71dc6bf836e54fec2cd5d59b68c662dc8a7c5e5453642909c67595d67dbf28
   # Tika compartilhado (modo A) e sidecar (B/C): o :latest do GHCR (build de 12/04/2026), fixado
   - name: ghcr.io/okfn-brasil/querido-diario-data-processing/apache-tika
     digest: sha256:d72830f9cedb8c02c5b2d1052634f1ff4baa3cd2ca1f868d57f8970136b8a36b
